@@ -299,10 +299,16 @@ class TimetableController extends Controller
             }
             if ($eg) {
                 $studentIds = $group->students->pluck('id')->flip();
+                $conflictingStudents = [];
                 foreach ($eg->students as $st) {
                     if (isset($studentIds[$st->id])) {
-                        return response()->json(['error' => 'Vienas ar daugiau mokinių tuo laiku užimti'], 422);
+                        $conflictingStudents[] = $st->full_name . ' (' . $eg->name . ')';
                     }
+                }
+                if (!empty($conflictingStudents)) {
+                    return response()->json([
+                        'error' => 'Užimti mokiniai: ' . implode(', ', $conflictingStudents)
+                    ], 422);
                 }
             }
         }
@@ -358,6 +364,7 @@ class TimetableController extends Controller
             'day' => 'required|string',
             'slot' => 'required|integer|min:1',
             'teacher_id' => 'required|integer',
+            'swap' => 'nullable|boolean', // Allow swap operation
         ]);
         $slotModel = $timetable->slots()->with(['group.subject','group.room','group.teacherLoginKey','group.students'])->find($validated['slot_id']);
         if (!$slotModel) {
@@ -368,28 +375,42 @@ class TimetableController extends Controller
             return response()->json(['error' => 'Grupė arba mokytojas nerastas'], 404);
         }
         // Teacher row must match group's teacher
-        if ($group->teacherLoginKey->id != $validated['teacher_id']) {
+        if ((int)$group->teacherLoginKey->id !== (int)$validated['teacher_id']) {
             return response()->json(['error' => 'Šią grupę galima tempti tik ant jos mokytojo eilutės'], 422);
         }
         $day = $validated['day'];
         $slot = (int)$validated['slot'];
+        $allowSwap = $validated['swap'] ?? false;
+        
         // If moving to same position, no-op
         if ($slotModel->day === $day && (int)$slotModel->slot === $slot) {
             return response()->json(['success' => true, 'html' => [
                 'group' => $group->name,
                 'subject' => $group->subject?->name,
                 'room' => $group->room?->number ? ($group->room->number.' '.$group->room->name) : null,
+                'slot_id' => $slotModel->id,
             ]]);
         }
-        // Check conflicts at target excluding this slot itself
-        $existing = $timetable->slots()->where('day',$day)->where('slot',$slot)->with(['group.teacherLoginKey','group.room','group.students','group.subject'])->get();
-        foreach ($existing as $ex) {
-            if ($ex->id === $slotModel->id) continue;
+        
+        // Check if target position is occupied
+        $existingAtTarget = $timetable->slots()->where('day',$day)->where('slot',$slot)
+            ->with(['group.teacherLoginKey','group.room','group.students','group.subject'])
+            ->get()
+            ->filter(fn($s) => $s->id !== $slotModel->id);
+        
+        // First, check for conflicts at target position (excluding the lesson that might be there)
+        $hasConflictAtTarget = false;
+        $conflictMessage = null;
+        
+        foreach ($existingAtTarget as $ex) {
             $eg = $ex->group;
             if ($eg && $eg->teacher_login_key_id === $group->teacher_login_key_id) {
-                return response()->json(['error' => 'Mokytojas tuo metu užimtas'], 422);
+                $hasConflictAtTarget = true;
+                $conflictMessage = 'Mokytojas tuo metu užimtas';
+                break;
             }
             if ($eg && $group->room_id && $eg->room_id === $group->room_id) {
+                $hasConflictAtTarget = true;
                 $roomName = $group->room ? ($group->room->number . ' ' . $group->room->name) : 'Kabinetas';
                 $occupantGroup = $eg->name ?? 'kita grupė';
                 $occupantTeacher = $eg->teacherLoginKey?->full_name ?? 'nežinomas mokytojas';
@@ -397,17 +418,120 @@ class TimetableController extends Controller
                 $parts = ['grupė ' . $occupantGroup];
                 if ($occupantSubject) { $parts[] = 'dalykas ' . $occupantSubject; }
                 $parts[] = 'mokytojas ' . $occupantTeacher;
-                return response()->json(['error' => $roomName . ' tuo metu užimtas: ' . implode(', ', $parts)], 422);
+                $conflictMessage = $roomName . ' tuo metu užimtas: ' . implode(', ', $parts);
+                break;
             }
             if ($eg) {
                 $studentIds = $group->students->pluck('id')->flip();
+                $conflictingStudents = [];
                 foreach ($eg->students as $st) {
                     if (isset($studentIds[$st->id])) {
-                        return response()->json(['error' => 'Vienas ar daugiau mokinių tuo laiku užimti'], 422);
+                        $conflictingStudents[] = $st->full_name . ' (' . $eg->name . ')';
                     }
+                }
+                if (!empty($conflictingStudents)) {
+                    sort($conflictingStudents);
+                    $hasConflictAtTarget = true;
+                    $conflictMessage = 'Užimti mokiniai: ' . implode(', ', $conflictingStudents);
+                    break;
                 }
             }
         }
+        
+        // If there's a conflict at target, check if we can swap
+        if ($hasConflictAtTarget && $existingAtTarget->isNotEmpty() && !$allowSwap) {
+            $targetSlot = $existingAtTarget->first();
+            $targetGroup = $targetSlot->group;
+            
+            // Check if swap is possible (validate conflicts if we swap)
+            $canSwap = true;
+            $swapConflicts = [];
+            
+            // Check if moving target group to source position causes conflicts
+            $sourceDay = $slotModel->day;
+            $sourceSlot = $slotModel->slot;
+            
+            // Check teacher conflict at source for target group
+            $conflictsAtSource = $timetable->slots()->where('day', $sourceDay)->where('slot', $sourceSlot)
+                ->with(['group.teacherLoginKey','group.room','group.students'])
+                ->get()
+                ->filter(fn($s) => $s->id !== $targetSlot->id && $s->id !== $slotModel->id);
+            
+            foreach ($conflictsAtSource as $cs) {
+                $cg = $cs->group;
+                if ($cg && $targetGroup && $cg->teacher_login_key_id === $targetGroup->teacher_login_key_id) {
+                    $canSwap = false;
+                    $swapConflicts[] = "Negalima sukeisti: mokytojas {$targetGroup->teacherLoginKey?->full_name} užimtas pradinėje pozicijoje";
+                }
+                if ($cg && $targetGroup && $targetGroup->room_id && $cg->room_id === $targetGroup->room_id) {
+                    $canSwap = false;
+                    $roomName = $targetGroup->room ? ($targetGroup->room->number . ' ' . $targetGroup->room->name) : 'Kabinetas';
+                    $swapConflicts[] = "Negalima sukeisti: {$roomName} užimtas pradinėje pozicijoje";
+                }
+            }
+            
+            if ($canSwap) {
+                return response()->json([
+                    'needsSwap' => true,
+                    'targetGroup' => $targetGroup->name,
+                    'targetSubject' => $targetGroup->subject?->name,
+                    'message' => $conflictMessage . "\n\nPozicijoje yra grupė \"{$targetGroup->name}\". Ar norite sukeisti vietomis?",
+                ], 200);
+            } else {
+                return response()->json([
+                    'error' => implode('; ', $swapConflicts),
+                    'cannotSwap' => true,
+                ], 422);
+            }
+        }
+        
+        // If there's a conflict but position is not occupied, just show error
+        if ($hasConflictAtTarget) {
+            return response()->json(['error' => $conflictMessage], 422);
+        }
+        
+        // Perform swap if requested
+        if ($allowSwap && $existingAtTarget->isNotEmpty()) {
+            $targetSlot = $existingAtTarget->first();
+            $sourceDay = $slotModel->day;
+            $sourceSlot = $slotModel->slot;
+            
+            // Swap positions
+            $targetSlot->day = $sourceDay;
+            $targetSlot->slot = $sourceSlot;
+            $targetSlot->save();
+            
+            $slotModel->day = $day;
+            $slotModel->slot = $slot;
+            $slotModel->save();
+            
+            return response()->json([
+                'success' => true,
+                'swapped' => true,
+                'html' => [
+                    'group' => $group->name,
+                    'subject' => $group->subject?->name,
+                    'room' => $group->room?->number ? ($group->room->number.' '.$group->room->name) : null,
+                    'slot_id' => $slotModel->id,
+                ],
+                'swappedHtml' => [
+                    'group' => $targetSlot->group->name,
+                    'subject' => $targetSlot->group->subject?->name,
+                    'room' => $targetSlot->group->room?->number ? ($targetSlot->group->room->number.' '.$targetSlot->group->room->name) : null,
+                    'slot_id' => $targetSlot->id,
+                    'day' => $sourceDay,
+                    'slot' => $sourceSlot,
+                ],
+            ]);
+        }
+        
+        // If target position has a lesson but no conflicts, just move and delete the target
+        if ($existingAtTarget->isNotEmpty()) {
+            foreach ($existingAtTarget as $ex) {
+                $ex->delete();
+            }
+        }
+        
         // Subject per day limit for group at target day
         $sameDayCount = $timetable->slots()->where('timetable_group_id',$group->id)->where('day',$day)
             ->where('id','<>',$slotModel->id)->count();
@@ -415,16 +539,19 @@ class TimetableController extends Controller
         if ($sameDayCount >= $maxSame) {
             return response()->json(['error' => 'Viršytas pamokų skaičius tos pačios disciplinos tą dieną'], 422);
         }
+        
         // Update slot position
         $slotModel->day = $day;
         $slotModel->slot = $slot;
         $slotModel->save();
+        
         return response()->json([
             'success' => true,
             'html' => [
                 'group' => $group->name,
                 'subject' => $group->subject?->name,
                 'room' => $group->room?->number ? ($group->room->number.' '.$group->room->name) : null,
+                'slot_id' => $slotModel->id,
             ],
         ]);
     }
@@ -510,7 +637,11 @@ class TimetableController extends Controller
             $studentIds = $group->students->pluck('id')->toArray();
             foreach ($eg->students as $st) {
                 if (in_array($st->id, $studentIds)) {
-                    $studentConflicts[] = $st->full_name ?? "ID: {$st->id}";
+                    $studentConflicts[] = [
+                        'name' => $st->full_name ?? "ID: {$st->id}",
+                        'group' => $eg->name ?? 'nežinoma grupė',
+                        'subject' => $eg->subject?->name ?? '—',
+                    ];
                 }
             }
         }
@@ -533,12 +664,13 @@ class TimetableController extends Controller
         }
         
         if (!empty($studentConflicts)) {
-            $studentList = implode(', ', array_unique(array_slice($studentConflicts, 0, 3)));
-            $moreCount = count($studentConflicts) - 3;
-            if ($moreCount > 0) {
-                $studentList .= " ir dar {$moreCount}";
-            }
-            $conflicts[] = "Mokiniai užimti: {$studentList}";
+            // Sort students alphabetically
+            usort($studentConflicts, function($a, $b) {
+                return strcmp($a['name'], $b['name']);
+            });
+            $conflicts[] = 'Užimti mokiniai: ' . implode(', ', array_map(function($sc) {
+                return "{$sc['name']} ({$sc['group']})";
+            }, $studentConflicts));
         }
         
         // Subject per day limit (per group id rule)

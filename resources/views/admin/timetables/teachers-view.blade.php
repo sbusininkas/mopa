@@ -335,14 +335,11 @@ document.addEventListener('DOMContentLoaded', function(){
                 const slotId = dragged.dataset.slotId;
                 const groupName = dragged.dataset.groupName || 'Grupė';
                 const subjectName = dragged.dataset.subjectName || '';
+                const groupId = dragged.dataset.groupId;
+                const originalCell = dragged.closest('td');
+                
                 try {
-                    // Check target conflicts by reusing checkConflict with the group's id
-                    const groupId = dragged.dataset.groupId;
-                    const conflicts = await checkConflicts(groupId, teacherId, day, slot);
-                    if (conflicts.hasConflicts) {
-                        await showConfirmDialog(groupName, subjectName, day, slot, conflicts, groupId); // show conflicts in modal
-                        return;
-                    }
+                    // Try to move (this will check for swap needs)
                     const resp = await fetch(`{{ route('schools.timetables.move-slot', [$school, $timetable]) }}`, {
                         method: 'POST',
                         headers: {
@@ -350,16 +347,92 @@ document.addEventListener('DOMContentLoaded', function(){
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                             'Accept': 'application/json'
                         },
-                        body: JSON.stringify({ slot_id: slotId, teacher_id: teacherId, day: day, slot: slot })
+                        body: JSON.stringify({ slot_id: slotId, teacher_id: teacherId, day: day, slot: slot, swap: false })
                     });
                     const data = await resp.json();
+                    
+                    // Check if swap is needed
+                    if (data.needsSwap) {
+                        const confirmed = await showSwapDialog(groupName, subjectName, data.targetGroup, data.targetSubject, day, slot);
+                        if (!confirmed) return;
+                        
+                        // Perform swap
+                        const swapResp = await fetch(`{{ route('schools.timetables.move-slot', [$school, $timetable]) }}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({ slot_id: slotId, teacher_id: teacherId, day: day, slot: slot, swap: true })
+                        });
+                        const swapData = await swapResp.json();
+                        
+                        if (!swapResp.ok || !swapData.success) {
+                            showErrorModal('Klaida', swapData.error || 'Nepavyko sukeisti pamokų');
+                            return;
+                        }
+                        
+                        // Handle swap UI update
+                        if (swapData.swapped && swapData.swappedHtml) {
+                            // Update original cell with swapped lesson
+                            const swappedTooltip = `<div class=\"tt-inner\">`
+                              + `<div class=\"tt-row tt-row-head\"><i class=\"bi bi-clock-history tt-ico\"></i><span class=\"tt-val\">${swapData.swappedHtml.day} • ${swapData.swappedHtml.slot} pamoka</span></div>`
+                              + `<div class=\"tt-divider\"></div>`
+                              + `<div class=\"tt-row\"><i class=\"bi bi-collection-fill tt-ico\"></i><span class=\"tt-val\">${swapData.swappedHtml.group}</span></div>`
+                              + `<div class=\"tt-row\"><i class=\"bi bi-book-half tt-ico\"></i><span class=\"tt-val\">${swapData.swappedHtml.subject ?? '—'}</span></div>`
+                              + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${swapData.swappedHtml.room ?? '—'}</span></div>`
+                              + `</div>`;
+                            const swappedB64 = btoa(unescape(encodeURIComponent(swappedTooltip)));
+                            if (originalCell) {
+                                originalCell.innerHTML = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" data-tooltip-b64=\"${swappedB64}\" draggable=\"true\"
+                                        data-kind=\"scheduled\"
+                                        data-slot-id=\"${swapData.swappedHtml.slot_id}\"
+                                        data-group-id=\"${swapData.swappedHtml.group_id ?? ''}\"
+                                        data-teacher-id=\"${teacherId}\"
+                                        data-group-name=\"${swapData.swappedHtml.group}\"
+                                        data-subject-name=\"${swapData.swappedHtml.subject ?? ''}\"
+                                >${swapData.swappedHtml.group}</span>`;
+                                if (window.bootstrap) {
+                                    const swappedBadge = originalCell.querySelector('.tt-trigger');
+                                    new bootstrap.Tooltip(swappedBadge, { title: swappedTooltip, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+                                    initBadgeDrag(swappedBadge);
+                                }
+                            }
+                        }
+                        
+                        // Update target cell
+                        const tooltipHtml = `<div class=\"tt-inner\">`
+                          + `<div class=\"tt-row tt-row-head\"><i class=\"bi bi-clock-history tt-ico\"></i><span class=\"tt-val\">${day} • ${slot} pamoka</span></div>`
+                          + `<div class=\"tt-divider\"></div>`
+                          + `<div class=\"tt-row\"><i class=\"bi bi-collection-fill tt-ico\"></i><span class=\"tt-val\">${swapData.html.group}</span></div>`
+                          + `<div class=\"tt-row\"><i class=\"bi bi-book-half tt-ico\"></i><span class=\"tt-val\">${swapData.html.subject ?? '—'}</span></div>`
+                          + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${swapData.html.room ?? '—'}</span></div>`
+                          + `</div>`;
+                        const b64 = btoa(unescape(encodeURIComponent(tooltipHtml)));
+                        cell.innerHTML = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" data-tooltip-b64=\"${b64}\" draggable=\"true\"
+                                data-kind=\"scheduled\"
+                                data-slot-id=\"${swapData.html.slot_id ?? ''}\"
+                                data-group-id=\"${groupId}\"
+                                data-teacher-id=\"${teacherId}\"
+                                data-group-name=\"${swapData.html.group}\"
+                                data-subject-name=\"${swapData.html.subject ?? ''}\"
+                        >${swapData.html.group}</span>`;
+                        if (window.bootstrap) {
+                            const badge = cell.querySelector('.tt-trigger');
+                            new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+                            initBadgeDrag(badge);
+                        }
+                        flashMessage('Pamokos sėkmingai sukeistos', 'success');
+                        return;
+                    }
+                    
                     if (!resp.ok || !data.success) {
                         showErrorModal('Klaida', data.error || 'Nepavyko perkelti pamokos');
                         return;
                     }
-                    // Remove badge from original cell and place in target
-                    // Original cell is parent of dragged
-                    const originalCell = dragged.closest('td');
+                    
+                    // Simple move (no swap)
                     if (originalCell) originalCell.innerHTML = '<span class="text-muted">—</span>';
                     const tooltipHtml = `<div class=\"tt-inner\">`
                       + `<div class=\"tt-row tt-row-head\"><i class=\"bi bi-clock-history tt-ico\"></i><span class=\"tt-val\">${day} • ${slot} pamoka</span></div>`
@@ -369,18 +442,18 @@ document.addEventListener('DOMContentLoaded', function(){
                       + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${data.html.room ?? '—'}</span></div>`
                       + `</div>`;
                     const b64 = btoa(unescape(encodeURIComponent(tooltipHtml)));
-                                        cell.innerHTML = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" data-tooltip-b64=\"${b64}\" draggable=\"true\"
-                                                data-kind=\"scheduled\"
-                                                data-slot-id=\"${data.html.slot_id ?? ''}\"
-                                                data-group-id=\"${dragged.dataset.groupId}\"
-                                                data-teacher-id=\"${teacherId}\"
-                                                data-group-name=\"${data.html.group}\"
-                                                data-subject-name=\"${data.html.subject ?? ''}\"
-                                        >${data.html.group}</span>`;
+                    cell.innerHTML = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" data-tooltip-b64=\"${b64}\" draggable=\"true\"
+                            data-kind=\"scheduled\"
+                            data-slot-id=\"${data.html.slot_id ?? ''}\"
+                            data-group-id=\"${groupId}\"
+                            data-teacher-id=\"${teacherId}\"
+                            data-group-name=\"${data.html.group}\"
+                            data-subject-name=\"${data.html.subject ?? ''}\"
+                    >${data.html.group}</span>`;
                     if (window.bootstrap) {
-                      const badge = cell.querySelector('.tt-trigger');
-                      new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-                                            initBadgeDrag(badge);
+                        const badge = cell.querySelector('.tt-trigger');
+                        new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+                        initBadgeDrag(badge);
                     }
                     flashMessage('Pamoka perkelta', 'success');
                 } catch(err) {
@@ -413,7 +486,21 @@ document.addEventListener('DOMContentLoaded', function(){
             const modal = document.createElement('div');
             modal.className = 'modal fade';
             modal.tabIndex = -1;
-            const manageUrl = `{{ route('schools.timetables.show', [$school, $timetable]) }}?openGroupEdit=${groupId || ''}`;
+            
+            // Process conflicts to handle "Užimti mokiniai:" specially
+            let conflictsHtml = '';
+            if (conflictData.hasConflicts && conflictData.conflicts) {
+                conflictsHtml = conflictData.conflicts.map(c => {
+                    if (typeof c === 'string' && c.startsWith('Užimti mokiniai:')) {
+                        const studentsPart = c.substring('Užimti mokiniai:'.length).trim();
+                        const students = studentsPart.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                        students.sort((a, b) => a.localeCompare(b, 'lt'));
+                        return '<li><strong>Užimti mokiniai:</strong><ul class="mt-1">' + students.map(s => `<li>${s}</li>`).join('') + '</ul></li>';
+                    }
+                    return `<li>${c}</li>`;
+                }).join('');
+            }
+            
             modal.innerHTML = `
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content">
@@ -431,13 +518,13 @@ document.addEventListener('DOMContentLoaded', function(){
                                 <div class="alert alert-danger mb-0">
                                     <strong>Negalima pridėti pamokos:</strong>
                                     <ul class="mb-0 mt-2">
-                                        ${conflictData.conflicts.map(c => `<li>${c}</li>`).join('')}
+                                        ${conflictsHtml}
                                     </ul>
                                 </div>
-                                <div class="d-flex justify-content-end">
-                                    <a href="${manageUrl}" class="btn btn-warning">
+                                <div class="d-flex justify-content-end mt-2">
+                                    <button type="button" class="btn btn-warning" onclick="openEditGroupModal(${groupId || ''}, this)">
                                         <i class="bi bi-gear"></i> Tvarkyti grupę
-                                    </a>
+                                    </button>
                                 </div>
                             ` : `
                                 <div class="alert alert-success mb-0">
@@ -476,11 +563,75 @@ document.addEventListener('DOMContentLoaded', function(){
         });
     }
 
+    function showSwapDialog(movingGroup, movingSubject, targetGroup, targetSubject, day, slot) {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.tabIndex = -1;
+            modal.innerHTML = `
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header bg-warning text-dark">
+                            <h5 class="modal-title">
+                                <i class="bi bi-arrow-left-right"></i> Sukeisti pamokų vietomis?
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-3">Pasirinkta pozicija <strong>${day}, ${slot} pamoka</strong> jau užimta.</p>
+                            <div class="alert alert-info mb-3">
+                                <strong>Keliama pamoka:</strong><br>
+                                ${movingGroup} ${movingSubject ? '(' + movingSubject + ')' : ''}
+                            </div>
+                            <div class="alert alert-warning mb-0">
+                                <strong>Esanti pamoka:</strong><br>
+                                ${targetGroup} ${targetSubject ? '(' + targetSubject + ')' : ''}
+                            </div>
+                            <p class="mt-3 mb-0"><i class="bi bi-info-circle"></i> Ar norite sukeisti šias dvi pamokas vietomis?</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                            <button type="button" class="btn btn-warning" id="confirmSwap">
+                                <i class="bi bi-arrow-left-right"></i> Sukeisti
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+            
+            modal.querySelector('#confirmSwap').addEventListener('click', () => {
+                bsModal.hide();
+                resolve(true);
+            });
+            
+            modal.addEventListener('hidden.bs.modal', () => {
+                modal.remove();
+                resolve(false);
+            });
+        });
+    }
+
     function showErrorModal(title, message) {
         const modal = document.createElement('div');
         modal.className = 'modal fade';
         modal.tabIndex = -1;
-        const bodyHtml = Array.isArray(message) ? `<ul class="mb-0">${message.map(m=>`<li>${m}</li>`).join('')}</ul>` : `<p class="mb-0">${message}</p>`;
+        
+        let bodyHtml;
+        if (Array.isArray(message)) {
+            bodyHtml = `<ul class="mb-0">${message.map(m=>`<li>${m}</li>`).join('')}</ul>`;
+        } else if (typeof message === 'string' && message.startsWith('Užimti mokiniai:')) {
+            // Parse student conflicts
+            const studentsPart = message.substring('Užimti mokiniai:'.length).trim();
+            const students = studentsPart.split(',').map(s => s.trim()).filter(s => s.length > 0);
+            students.sort((a, b) => a.localeCompare(b, 'lt'));
+            bodyHtml = `<p class="mb-2"><strong>Užimti mokiniai:</strong></p><ul class="mb-0">${students.map(s => `<li>${s}</li>`).join('')}</ul>`;
+        } else {
+            bodyHtml = `<p class="mb-0">${message}</p>`;
+        }
+        
         modal.innerHTML = `
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
@@ -500,12 +651,137 @@ document.addEventListener('DOMContentLoaded', function(){
         modal.addEventListener('hidden.bs.modal', () => modal.remove());
     }
     
-    function flashMessage(msg,type){
-        let box=document.getElementById('flashBox');
-        if(!box){ box=document.createElement('div'); box.id='flashBox'; box.style.position='fixed'; box.style.top='10px'; box.style.right='10px'; box.style.zIndex='9999'; document.body.appendChild(box); }
-        const el=document.createElement('div'); el.className=`alert alert-${type} py-1 px-2 mb-2`; el.textContent=msg; box.appendChild(el); setTimeout(()=>{ el.remove(); if(!box.children.length) box.remove(); },3000);
-    }
 });
+
+function flashMessage(msg,type){
+    let box=document.getElementById('flashBox');
+    if(!box){ box=document.createElement('div'); box.id='flashBox'; box.style.position='fixed'; box.style.top='10px'; box.style.right='10px'; box.style.zIndex='9999'; document.body.appendChild(box); }
+    const el=document.createElement('div'); el.className=`alert alert-${type} py-1 px-2 mb-2`; el.textContent=msg; box.appendChild(el); setTimeout(()=>{ el.remove(); if(!box.children.length) box.remove(); },3000);
+}
+
+async function openEditGroupModal(groupId, buttonElement) {
+    if (!groupId) return;
+    
+    // Close the conflict modal first
+    const conflictModal = buttonElement.closest('.modal');
+    if (conflictModal) {
+        const bsModal = bootstrap.Modal.getInstance(conflictModal);
+        if (bsModal) bsModal.hide();
+    }
+    
+    try {
+        const resp = await fetch(`{{ route('schools.timetables.groups.edit-data', [$school, $timetable, ':groupId']) }}`.replace(':groupId', groupId));
+        const data = await resp.json();
+        
+        const editModal = document.createElement('div');
+        editModal.className = 'modal fade';
+        editModal.tabIndex = -1;
+        editModal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title"><i class="bi bi-pencil"></i> Redaguoti grupę</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form id="editGroupForm">
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Pavadinimas</label>
+                                <input type="text" name="name" class="form-control" value="${data.group.name}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Dalykas</label>
+                                <select name="subject_id" class="form-select">
+                                    <option value="">-- Nepasirinkta --</option>
+                                    ${data.subjects.map(s => `<option value="${s.id}" ${data.group.subject_id == s.id ? 'selected' : ''}>${s.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Mokytojas</label>
+                                <select name="teacher_login_key_id" class="form-select">
+                                    <option value="">-- Nepasirinkta --</option>
+                                    ${data.teachers.map(t => `<option value="${t.id}" ${data.group.teacher_login_key_id == t.id ? 'selected' : ''}>${t.full_name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Kabinetas</label>
+                                <select name="room_id" class="form-select">
+                                    <option value="">-- Nepasirinkta --</option>
+                                    ${data.rooms.map(r => `<option value="${r.id}" ${data.group.room_id == r.id ? 'selected' : ''}>${r.number} ${r.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="row">
+                                <div class="col-6">
+                                    <label class="form-label">Savaitės tipas</label>
+                                    <select name="week_type" class="form-select" required>
+                                        <option value="all" ${data.group.week_type == 'all' ? 'selected' : ''}>Kiekviena</option>
+                                        <option value="even" ${data.group.week_type == 'even' ? 'selected' : ''}>Lyginės</option>
+                                        <option value="odd" ${data.group.week_type == 'odd' ? 'selected' : ''}>Nelyginės</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Pamokų sk./sav.</label>
+                                    <input type="number" name="lessons_per_week" class="form-control" min="1" max="20" value="${data.group.lessons_per_week}" required>
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <div class="form-check">
+                                    <input type="checkbox" name="is_priority" class="form-check-input" value="1" ${data.group.is_priority ? 'checked' : ''}>
+                                    <label class="form-check-label">
+                                        <i class="bi bi-star"></i> Prioritetinė pamoka (1-5 pamokos)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                            <button type="submit" class="btn btn-warning">Išsaugoti</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(editModal);
+        const bsEditModal = new bootstrap.Modal(editModal);
+        bsEditModal.show();
+        
+        const form = editModal.querySelector('#editGroupForm');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(form);
+            const updateData = {};
+            formData.forEach((value, key) => updateData[key] = value);
+            
+            try {
+                const updateResp = await fetch(`{{ route('schools.timetables.groups.update', [$school, $timetable, ':groupId']) }}`.replace(':groupId', groupId), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(updateData)
+                });
+                const result = await updateResp.json();
+                
+                if (result.success) {
+                    bsEditModal.hide();
+                    flashMessage('Grupė atnaujinta', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showErrorModal('Klaida', result.message || 'Nepavyko išsaugoti');
+                }
+            } catch (err) {
+                showErrorModal('Klaida', 'Nepavyko išsaugoti grupės');
+            }
+        });
+        
+        editModal.addEventListener('hidden.bs.modal', () => editModal.remove());
+    } catch (err) {
+        showErrorModal('Klaida', 'Nepavyko užkrauti grupės duomenų');
+    }
+}
 
 // Initialize Bootstrap tooltips (requires Bootstrap JS loaded globally)
 document.addEventListener('DOMContentLoaded', function() {
