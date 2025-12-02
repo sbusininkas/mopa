@@ -137,6 +137,7 @@ Route::middleware(['auth', 'school.admin.or.supervisor'])->group(function () {
     Route::get('/admin/schools/{school}/timetables/{timetable}/all-teachers-working-days', [\App\Http\Controllers\TimetableController::class, 'allTeachersWorkingDays'])->name('schools.timetables.all-teachers-working-days');
 
     // Timetable groups
+    Route::get('/admin/schools/{school}/timetables/{timetable}/groups-list', [\App\Http\Controllers\TimetableGroupController::class, 'list'])->name('schools.timetables.groups.list');
     Route::post('/admin/schools/{school}/timetables/{timetable}/groups', [\App\Http\Controllers\TimetableGroupController::class, 'store'])->name('schools.timetables.groups.store');
     Route::get('/admin/schools/{school}/timetables/{timetable}/groups/{group}', [\App\Http\Controllers\TimetableGroupController::class, 'show'])->name('schools.timetables.groups.show');
     Route::get('/admin/schools/{school}/timetables/{timetable}/groups/{group}/edit-data', [\App\Http\Controllers\TimetableGroupController::class, 'editData'])->name('schools.timetables.groups.edit-data');

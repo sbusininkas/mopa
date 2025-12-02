@@ -199,7 +199,17 @@
                             <tr>
                                 <td>{{ $item['group_name'] }}</td>
                                 <td>{{ $item['subject_name'] }}</td>
-                                <td>{{ $item['teacher_name'] ?? '—' }}</td>
+                                <td>
+                                    @if(!empty($item['teacher_name']) && !empty($item['teacher_login_key_id']))
+                                        <a href="{{ route('schools.timetables.teacher', [$school, $timetable, $item['teacher_login_key_id']]) }}" 
+                                           class="text-decoration-none" 
+                                           title="Peržiūrėti mokytojo tvarkaraštį">
+                                            <i class="bi bi-person-circle me-1"></i>{{ $item['teacher_name'] }}
+                                        </a>
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </td>
                                 <td><span class="badge bg-warning text-dark">{{ $item['remaining_lessons'] }} / {{ $item['requested_lessons'] }}</span></td>
                                 <td class="small">
                                     @forelse($reasons as $rk => $rv)
@@ -589,7 +599,13 @@
         </div>
         <div class="card-body">
             <div id="groupsList">
-                @forelse($groups as $group)
+                <div class="text-center py-5" id="groupsLoader">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Kraunama...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Kraunamos grupės...</p>
+                </div>
+            </div>
                             <div class="modern-card mb-2" id="group{{ $group->id }}">
                                 <div class="d-flex justify-content-between align-items-center py-2 px-3" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#groupCollapse{{ $group->id }}" aria-expanded="false">
                                     <div class="d-flex align-items-center gap-2">
@@ -768,12 +784,6 @@
                                 </div>
                             </div>
                         </div>
-                    @empty
-                        <div class="empty-state">
-                            <i class="bi bi-inbox"></i>
-                            <p>Nėra grupių</p>
-                        </div>
-                    @endforelse
                 </div>
             </div>
         </div>
@@ -781,6 +791,247 @@
 </div>
 
 <script>
+// Load groups via AJAX
+async function loadGroups() {
+    const groupsList = document.getElementById('groupsList');
+    const loader = document.getElementById('groupsLoader');
+    
+    try {
+        const response = await fetch('{{ route("schools.timetables.groups.list", [$school, $timetable]) }}');
+        const data = await response.json();
+        
+        if (data.success && data.groups) {
+            if (data.groups.length === 0) {
+                groupsList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <p>Nėra grupių</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Render groups
+            let html = '';
+            data.groups.forEach(group => {
+                html += renderGroupHTML(group);
+            });
+            
+            groupsList.innerHTML = html;
+            
+            // Initialize listeners for all groups
+            data.groups.forEach(group => {
+                initializeGroupListeners(group.id);
+            });
+            
+            // Initialize collapse event listeners
+            data.groups.forEach(group => {
+                const collapseEl = document.getElementById('groupCollapse' + group.id);
+                if (collapseEl) {
+                    collapseEl.addEventListener('shown.bs.collapse', function() {
+                        initializeGroupListeners(group.id);
+                    });
+                }
+            });
+            
+            // Initialize group search functionality
+            initializeGroupSearch();
+        }
+    } catch (error) {
+        console.error('Error loading groups:', error);
+        groupsList.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i> Klaida kraunant grupes. Bandykite perkrauti puslapį.
+            </div>
+        `;
+    }
+}
+
+// Render single group HTML
+function renderGroupHTML(group) {
+    const weekTypeLabel = group.week_type === 'all' ? 'Kiekv. savaitė' : (group.week_type === 'even' ? 'Lyginės' : 'Nelyginės');
+    const roomBadge = group.room_number ? `<span class="badge bg-dark">${group.room_number} ${group.room_name || ''}</span>` : '';
+    const priorityBadge = group.is_priority ? `<span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> Prioritetinė</span>` : '';
+    
+    return `
+        <div class="modern-card mb-2" id="group${group.id}">
+            <div class="d-flex justify-content-between align-items-center py-2 px-3" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#groupCollapse${group.id}" aria-expanded="false">
+                <div class="d-flex align-items-center gap-2">
+                    <strong>${group.name}</strong>
+                    <span class="badge bg-secondary">${group.subject_name || ''}</span>
+                    <span class="badge bg-info text-dark">${group.teacher_name || ''}</span>
+                    ${roomBadge}
+                    <span class="badge bg-light text-dark">${weekTypeLabel}</span>
+                    <span class="badge bg-primary">${group.lessons_per_week} pam./sav.</span>
+                    ${priorityBadge}
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editGroup${group.id}" onclick="event.stopPropagation()"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteGroup${group.id}" onclick="event.stopPropagation()"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+            <div class="collapse" id="groupCollapse${group.id}">
+                <div class="card-body border-top">
+                    <form method="POST" class="assign-form" action="{{ route('schools.timetables.groups.assign-students', [$school, $timetable, ':groupId']) }}".replace(':groupId', '${group.id}')>
+                        @csrf
+                        <div class="row">
+                            <div class="col-md-5">
+                                <label class="form-label">Ieškoti mokinių</label>
+                                <input type="text" class="form-control mb-2" id="globalSearch${group.id}" placeholder="Įveskite vardą ar pavardę...">
+                                <div class="mt-2">
+                                    <label class="form-label text-muted small">arba pasirinkite klasę</label>
+                                    <select id="classSelect${group.id}" class="form-select">
+                                        <option value="">-- Pasirinkite klasę --</option>
+                                        @foreach($school->classes as $class)
+                                            <option value="{{ $class->id }}">{{ $class->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="mt-2 d-flex align-items-center gap-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="selectAll${group.id}">
+                                        <label class="form-check-label" for="selectAll${group.id}">Pažymėti visus</label>
+                                    </div>
+                                    <input type="text" class="form-control form-control-sm" id="filterInput${group.id}" placeholder="Filtruoti rezultatus">
+                                </div>
+                                <div class="mt-3" id="studentsList${group.id}">
+                                    <p class="text-muted small">Ieškokite mokinio arba pasirinkite klasę.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-7">
+                                <div class="d-flex justify-content-end align-items-center mb-1">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="removeAll${group.id}"><i class="bi bi-x-circle"></i> Pašalinti visus</button>
+                                </div>
+                                <div class="modern-table-wrapper">
+                                    <table class="modern-table table table-hover mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:40px"></th>
+                                                <th>Vardas</th>
+                                                <th>Klasė</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="assignedStudents${group.id}">
+                                            ${group.students.map(student => `
+                                                <tr>
+                                                    <td><input type="checkbox" name="login_key_ids[]" value="${student.id}" checked></td>
+                                                    <td>${student.full_name}</td>
+                                                    <td>${student.class_name}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="text-end mt-2">
+                                    <button class="btn btn-primary btn-sm assign-submit" type="submit" data-loading-text="<span class='spinner-border spinner-border-sm me-1'></span>Saugoma..."><i class="bi bi-save"></i> Išsaugoti priskyrimus</button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Edit Group Modal -->
+        <div class="modal fade" id="editGroup${group.id}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title"><i class="bi bi-pencil"></i> Redaguoti grupę</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form method="POST" action="{{ route('schools.timetables.groups.update', [$school, $timetable, ':groupId']) }}".replace(':groupId', '${group.id}')>
+                        <div class="modal-body">
+                            @csrf
+                            @method('PUT')
+                            <div class="mb-3">
+                                <label class="form-label">Pavadinimas</label>
+                                <input type="text" name="name" class="form-control" value="${group.name}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Dalykas</label>
+                                <select name="subject_id" class="form-select">
+                                    <option value="">-- Pasirinkite --</option>
+                                    @foreach($school->subjects as $subject)
+                                        <option value="{{ $subject->id }}">${group.subject_id === {{ $subject->id }} ? 'selected' : ''}>{{ $subject->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Mokytojas</label>
+                                <select name="teacher_login_key_id" class="form-select">
+                                    <option value="">-- Pasirinkite --</option>
+                                    @foreach($school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->orderBy('first_name')->get() as $teacher)
+                                        <option value="{{ $teacher->id }}">${group.teacher_login_key_id === {{ $teacher->id }} ? 'selected' : ''}>{{ $teacher->full_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Kabinetas</label>
+                                <select name="room_id" class="form-select">
+                                    <option value="">-- Pasirinkite --</option>
+                                    @foreach($school->rooms as $room)
+                                        <option value="{{ $room->id }}">${group.room_id === {{ $room->id }} ? 'selected' : ''}>{{ $room->number }} {{ $room->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Savaitės tipas</label>
+                                <select name="week_type" class="form-select" required>
+                                    <option value="all" ${group.week_type === 'all' ? 'selected' : ''}>Kiekvieną savaitę</option>
+                                    <option value="even" ${group.week_type === 'even' ? 'selected' : ''}>Tik lygines savaites</option>
+                                    <option value="odd" ${group.week_type === 'odd' ? 'selected' : ''}>Tik nelygines savaites</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Pamokų per savaitę</label>
+                                <input type="number" name="lessons_per_week" class="form-control" value="${group.lessons_per_week}" min="1" max="20" required>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="is_priority" id="is_priority${group.id}" ${group.is_priority ? 'checked' : ''}>
+                                <label class="form-check-label" for="is_priority${group.id}">Prioritetinė grupė</label>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                            <button type="submit" class="btn btn-warning">Išsaugoti</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Delete Group Modal -->
+        <div class="modal fade" id="deleteGroup${group.id}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title"><i class="bi bi-trash"></i> Pašalinti grupę</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form method="POST" action="{{ route('schools.timetables.groups.destroy', [$school, $timetable, ':groupId']) }}".replace(':groupId', '${group.id}')>
+                        <div class="modal-body">
+                            @csrf
+                            @method('DELETE')
+                            <p>Ar tikrai norite pašalinti grupę <strong>${group.name}</strong>?</p>
+                            <p class="text-danger small">Veiksmas negrįžtamas!</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                            <button type="submit" class="btn btn-danger">Pašalinti</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Load groups on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadGroups();
+});
+
 // Scroll to group function
 function scrollToGroup(groupId) {
     const groupElement = document.getElementById('group' + groupId);
@@ -1124,10 +1375,11 @@ function saveUnscheduledGroup(groupId) {
     const url = '{{ route("schools.timetables.groups.update", [$school, $timetable, ":groupId"]) }}'.replace(':groupId', groupId);
     
     fetch(url, {
-        method: 'PUT',
+        method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json'
         },
         body: JSON.stringify(data)
     })
@@ -1139,15 +1391,15 @@ function saveUnscheduledGroup(groupId) {
             if (modal) modal.hide();
             
             // Show success message
-            alert('Grupė sėkmingai atnaujinta!');
-            window.location.reload();
+            showFlashMessage('Grupė sėkmingai atnaujinta!', 'success');
+            setTimeout(() => window.location.reload(), 1000);
         } else {
-            alert('Klaida: ' + (result.message || 'Nepavyko išsaugoti grupės'));
+            showFlashMessage('Klaida: ' + (result.message || 'Nepavyko išsaugoti grupės'), 'danger');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Įvyko klaida išsaugant grupę');
+        showFlashMessage('Įvyko klaida išsaugant grupę', 'danger');
     });
 }
 
@@ -1171,8 +1423,8 @@ function confirmCopyGroup(groupId, unscheduledCount) {
             const modal = bootstrap.Modal.getInstance(document.getElementById('copyUnscheduledGroup' + groupId));
             if (modal) modal.hide();
             
-            alert(data.message);
-            window.location.reload();
+            showFlashMessage(data.message, 'success');
+            setTimeout(() => window.location.reload(), 1000);ocation.reload(), 1000);
         } else {
             alert('Klaida: ' + (data.message || 'Nepavyko sukurti kopijos'));
         }
@@ -1190,11 +1442,11 @@ function confirmCopyGroupWithData(groupId, unscheduledCount) {
     
     // Validate required fields
     if (!formData.get('teacher_login_key_id')) {
-        alert('Prašome pasirinkti mokytoją');
+        showFlashMessage('Prašome pasirinkti mokytoją', 'warning');
         return;
     }
     if (!formData.get('room_id')) {
-        alert('Prašome pasirinkti kabinetą');
+        showFlashMessage('Prašome pasirinkti kabinetą', 'warning');
         return;
     }
     
@@ -1222,15 +1474,15 @@ function confirmCopyGroupWithData(groupId, unscheduledCount) {
             const modal = bootstrap.Modal.getInstance(document.getElementById('copyUnscheduledGroup' + groupId));
             if (modal) modal.hide();
             
-            alert(result.message);
-            window.location.reload();
+            showFlashMessage(result.message, 'success');
+            setTimeout(() => window.location.reload(), 1000);
         } else {
-            alert('Klaida: ' + (result.message || 'Nepavyko sukurti kopijos'));
+            showFlashMessage('Klaida: ' + (result.message || 'Nepavyko sukurti kopijos'), 'danger');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Įvyko klaida kopijuojant grupę');
+        showFlashMessage('Įvyko klaida kopijuojant grupę', 'danger');
     });
 }
 
@@ -1255,7 +1507,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Group search functionality
-document.addEventListener('DOMContentLoaded', function() {
+function initializeGroupSearch() {
     const groupSearch = document.getElementById('groupSearch');
     const groupsList = document.getElementById('groupsList');
     const allGroups = groupsList ? Array.from(groupsList.querySelectorAll('.modern-card.mb-2')) : [];
@@ -1307,25 +1559,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     }
+}
 
-    // Student assignment functionality per group - lazy initialization
-    const initializedGroups = new Set();
+// Student assignment functionality per group - lazy initialization
+const initializedGroups = new Set();
+
+function initializeGroupListeners(groupId) {
+    if (initializedGroups.has(groupId)) return; // Already initialized
+    initializedGroups.add(groupId);
     
-    function initializeGroupListeners(groupId) {
-        if (initializedGroups.has(groupId)) return; // Already initialized
-        initializedGroups.add(groupId);
-        
-        const globalSearch = document.getElementById('globalSearch' + groupId);
-        const classSelect = document.getElementById('classSelect' + groupId);
-        const studentsList = document.getElementById('studentsList' + groupId);
-        const assignedTbody = document.getElementById('assignedStudents' + groupId);
-        const filterInput = document.getElementById('filterInput' + groupId);
-        let searchTimeout = null;
+    const globalSearch = document.getElementById('globalSearch' + groupId);
+    const classSelect = document.getElementById('classSelect' + groupId);
+    const studentsList = document.getElementById('studentsList' + groupId);
+    const assignedTbody = document.getElementById('assignedStudents' + groupId);
+    const filterInput = document.getElementById('filterInput' + groupId);
+    let searchTimeout = null;
 
-        // Guard against missing DOM elements
-        if (!globalSearch || !classSelect || !studentsList || !assignedTbody || !filterInput) {
-            console.warn('Timetable group UI elements missing for group ' + groupId);
-            return;
+    // Guard against missing DOM elements
+    if (!globalSearch || !classSelect || !studentsList || !assignedTbody || !filterInput) {
+        console.warn('Timetable group UI elements missing for group ' + groupId);
+        return;
         }
 
         // Global search across all students
@@ -1449,19 +1702,34 @@ document.addEventListener('DOMContentLoaded', function() {
             if (input) input.closest('tr').remove();
         }
     }
-    
-    // Listen for collapse events to lazy-init groups
-    @foreach($groups as $group)
-    document.getElementById('groupCollapse{{ $group->id }}')?.addEventListener('shown.bs.collapse', function() {
-        initializeGroupListeners({{ $group->id }});
-    });
-    @endforeach
 });
 </script>
 @endsection
 
 @push('scripts')
 <script>
+// Flash message function
+function showFlashMessage(msg, type = 'success') {
+    let box = document.getElementById('flashBox');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'flashBox';
+        box.style.position = 'fixed';
+        box.style.top = '10px';
+        box.style.right = '10px';
+        box.style.zIndex = '9999';
+        document.body.appendChild(box);
+    }
+    const el = document.createElement('div');
+    el.className = `alert alert-${type} py-2 px-3 mb-2`;
+    el.textContent = msg;
+    box.appendChild(el);
+    setTimeout(() => {
+        el.remove();
+        if (!box.children.length) box.remove();
+    }, 3000);
+}
+
 // Poll progress if running
 function startGenerationPolling() {
     const progressBar = document.getElementById('generationProgressBar');
@@ -1697,12 +1965,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Show success message
                 showToast('Mokytojo darbo dienos atnaujintos', 'success');
             } else {
-                alert('Klaida išsaugant duomenis');
+                showFlashMessage('Klaida išsaugant duomenis', 'danger');
             }
         })
         .catch(e => {
             console.error(e);
-            alert('Klaida išsaugant duomenis');
+            showFlashMessage('Klaida išsaugant duomenis', 'danger');
         });
     };
 

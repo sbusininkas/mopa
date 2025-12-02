@@ -6,13 +6,16 @@
 <nav class="nav flex-column">
     {{-- Šie meniu punktai bus pridėti vėliau --}}
     <a href="#" class="nav-link disabled text-muted">
-        <i class="bi bi-calendar-week"></i> Mano tvarkaraštis
+        <i class="bi bi-calendar3"></i>
+        <span>Mano tvarkaraštis</span>
     </a>
     <a href="#" class="nav-link disabled text-muted">
-        <i class="bi bi-people"></i> Mano grupės
+        <i class="bi bi-people-fill"></i>
+        <span>Mano grupės</span>
     </a>
     <a href="#" class="nav-link disabled text-muted">
-        <i class="bi bi-book"></i> Mano dalykai
+        <i class="bi bi-book-fill"></i>
+        <span>Mano dalykai</span>
     </a>
 </nav>
 <div class="alert alert-info mt-3 mx-2" role="alert">

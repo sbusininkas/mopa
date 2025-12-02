@@ -11,6 +11,48 @@ use Illuminate\Http\Request;
 
 class TimetableGroupController extends Controller
 {
+    public function list(School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $groups = $timetable->groups()
+            ->with(['subject', 'teacherLoginKey', 'room', 'students'])
+            ->get();
+        
+        // Get scheduled and unscheduled counts for each group
+        $groupsData = $groups->map(function($group) use ($timetable) {
+            $scheduled = $timetable->slots()
+                ->where('group_id', $group->id)
+                ->count();
+            $unscheduled = max(0, ($group->lessons_per_week ?? 0) - $scheduled);
+            
+            return [
+                'id' => $group->id,
+                'name' => $group->name,
+                'subject_name' => $group->subject?->name,
+                'teacher_name' => $group->teacherLoginKey?->full_name,
+                'room_number' => $group->room?->number,
+                'room_name' => $group->room?->name,
+                'week_type' => $group->week_type,
+                'lessons_per_week' => $group->lessons_per_week ?? 0,
+                'is_priority' => $group->is_priority ? true : false,
+                'scheduled_count' => $scheduled,
+                'unscheduled_count' => $unscheduled,
+                'students_count' => $group->students->count(),
+                'students' => $group->students->map(fn($s) => [
+                    'id' => $s->id,
+                    'full_name' => $s->full_name,
+                    'class_name' => $s->class_name ?? ''
+                ])
+            ];
+        });
+        
+        return response()->json([
+            'success' => true,
+            'groups' => $groupsData
+        ]);
+    }
+
     public function store(Request $request, School $school, Timetable $timetable)
     {
         abort_unless($timetable->school_id === $school->id, 404);
