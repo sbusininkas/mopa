@@ -191,7 +191,7 @@ class LoginKeyController extends Controller
             });
         }
 
-        $loginKeys = $query->orderBy('type')->orderBy('last_name')->get();
+        $loginKeys = $query->orderBy('type')->orderBy('last_name')->orderBy('first_name')->get();
 
         return view('admin.login-keys.pdf', compact('school', 'loginKeys'));
     }

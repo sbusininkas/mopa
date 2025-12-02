@@ -66,7 +66,7 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);">
         <div class="container-fluid">
-            <a class="navbar-brand" href="/"><i class="bi bi-speedometer2"></i> Mokyklos Valdymas</a>
+            <a class="navbar-brand" href="{{ route('dashboard') }}"><i class="bi bi-speedometer2"></i> MOPA</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>

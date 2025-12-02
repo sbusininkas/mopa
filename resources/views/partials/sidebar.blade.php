@@ -1,41 +1,40 @@
+{{-- Main Sidebar Controller - determines which sidebar to show based on user role --}}
 @php
+    $user = Auth::user();
     $currentSchool = $school ?? $activeSchool ?? null;
 @endphp
-@if(Auth::user()->isSupervisor())
-    <div class="sidebar-section-title">
-        <i class="bi bi-shield-lock"></i> Administratorius
-    </div>
-    <nav class="nav flex-column">
-        <a href="{{ route('schools.index') }}" class="nav-link">
-            <i class="bi bi-building"></i> Mokyklos
-        </a>
-        <a href="{{ route('users.index') }}" class="nav-link">
-            <i class="bi bi-person-gear"></i> Vartotojai
-        </a>
-    </nav>
+
+{{-- Supervisor (System Administrator) --}}
+@if($user->isSupervisor())
+    @include('partials.sidebar-supervisor')
+    
+    {{-- If supervisor has selected a school, show school management menu --}}
+    @if($currentSchool)
+        <hr class="sidebar-divider my-3">
+        @include('partials.sidebar-supervisor-school')
+    @endif
 @endif
-@if($currentSchool && (Auth::user()->isSupervisor() || Auth::user()->isSchoolAdmin(is_object($currentSchool) ? $currentSchool->id : $currentSchool)))
-    <div class="sidebar-section-title mt-3">
-        <i class="bi bi-collection"></i> {{ $currentSchool->name }}
+
+{{-- School Administrator (non-supervisor) --}}
+@if(!$user->isSupervisor() && $currentSchool && $user->isSchoolAdmin(is_object($currentSchool) ? $currentSchool->id : $currentSchool))
+    @include('partials.sidebar-school-admin')
+@endif
+
+{{-- Teacher --}}
+@if($user->isTeacher() && !$user->isSupervisor() && !($currentSchool && $user->isSchoolAdmin(is_object($currentSchool) ? $currentSchool->id : $currentSchool)))
+    @include('partials.sidebar-teacher')
+@endif
+
+{{-- Student --}}
+@if($user->isStudent() && !$user->isSupervisor() && !($currentSchool && $user->isSchoolAdmin(is_object($currentSchool) ? $currentSchool->id : $currentSchool)))
+    @include('partials.sidebar-student')
+@endif
+
+{{-- No role assigned --}}
+@if(!$user->isSupervisor() && !$user->isTeacher() && !$user->isStudent() && !($currentSchool && $user->isSchoolAdmin(is_object($currentSchool) ? $currentSchool->id : $currentSchool)))
+    <div class="alert alert-warning mx-2" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> 
+        <strong>Prieiga nesuteikta</strong>
+        <p class="mb-0 mt-2 small">Jūs neturite priskirtos rolės. Susisiekite su administratoriumi.</p>
     </div>
-    <nav class="nav flex-column">
-        <a href="{{ route('schools.classes.index', $currentSchool) }}" class="nav-link">
-            <i class="bi bi-collection"></i> Klasės
-        </a>
-        <a href="{{ route('schools.login-keys.import', $currentSchool) }}" class="nav-link">
-            <i class="bi bi-upload"></i> Importavimas
-        </a>
-        <a href="{{ route('schools.login-keys.index', $currentSchool) }}" class="nav-link">
-            <i class="bi bi-key"></i> Raktai
-        </a>
-        <a href="{{ route('schools.subjects.index', $currentSchool) }}" class="nav-link">
-            <i class="bi bi-journal-bookmark"></i> Dalykai
-        </a>
-        <a href="{{ route('schools.timetables.index', $currentSchool) }}" class="nav-link">
-            <i class="bi bi-calendar3"></i> Tvarkaraščiai
-        </a>
-        <a href="{{ route('schools.rooms.index', $currentSchool) }}" class="nav-link">
-            <i class="bi bi-door-closed"></i> Kabinetai
-        </a>
-    </nav>
 @endif

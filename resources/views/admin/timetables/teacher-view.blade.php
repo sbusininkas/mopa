@@ -36,13 +36,18 @@
                                             @php $cell = $grid[$row][$code] ?? null; @endphp
                                             <td class="text-center lesson-col drop-target" style="min-width:220px" data-day="{{ $code }}" data-slot="{{ $row }}" data-teacher-id="{{ $teacher->id }}">
                                                 @if($cell)
-                                                    <span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" draggable="true"
+                                                    <span class="badge bg-secondary tt-trigger lesson-badge" style="font-size:0.75rem; cursor:pointer;" draggable="true"
                                                         data-kind="scheduled"
                                                         data-slot-id="{{ $cell['slot_id'] }}"
                                                         data-group-id="{{ $cell['group_id'] }}"
                                                         data-teacher-id="{{ $teacher->id }}"
                                                         data-group-name="{{ $cell['group'] }}"
                                                         data-subject-name="{{ $cell['subject'] ?? '' }}"
+                                                        data-room-display="{{ $cell['room'] ?? '' }}"
+                                                        data-teacher-full-name="{{ $teacher->full_name }}"
+                                                        data-day-label="{{ $label }}"
+                                                        data-lesson-nr="{{ $row }}"
+                                                        onclick="showLessonDetails(this, event)"
                                                     >{{ $cell['group'] }}</span>
                                                     <div class="mt-1 small">
                                                         <span class="badge bg-success">{{ $cell['subject'] ?? '—' }}</span>
@@ -89,6 +94,74 @@
         </div>
     </div>
 </div>
+
+<!-- Lesson Details Modal -->
+<div class="modal fade" id="lessonDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-info-circle"></i> Pamokos informacija
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-clock"></i> Laikas</h6>
+                        <p id="modal-time" class="text-muted"></p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-person-badge"></i> Mokytojas</h6>
+                        <p id="modal-teacher" class="text-muted"></p>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-collection-fill"></i> Grupė</h6>
+                        <p id="modal-group" class="text-muted"></p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-book-half"></i> Dalykas</h6>
+                        <p id="modal-subject" class="text-muted"></p>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6><i class="bi bi-door-closed"></i> Kabinetas</h6>
+                        <p id="modal-room" class="text-muted"></p>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6><i class="bi bi-people"></i> Mokiniai</h6>
+                        <div id="modal-students-loading" class="text-muted">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Kraunama...
+                        </div>
+                        <div id="modal-students" class="d-none"></div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12">
+                        <h6><i class="bi bi-exclamation-triangle"></i> Konfliktai</h6>
+                        <div id="modal-conflicts-loading" class="text-muted">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Kraunama...
+                        </div>
+                        <div id="modal-conflicts" class="d-none"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Uždaryti</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -618,6 +691,95 @@ async function openEditGroupModal(groupId, buttonElement) {
     } catch (err) {
         showErrorModal('Klaida', 'Nepavyko užkrauti grupės duomenų');
     }
+}
+
+// Show lesson details in modal
+function showLessonDetails(badge, event) {
+    event.stopPropagation(); // Prevent drag when clicking
+    
+    const slotId = badge.dataset.slotId;
+    const groupName = badge.dataset.groupName;
+    const subjectName = badge.dataset.subjectName;
+    const roomDisplay = badge.dataset.roomDisplay;
+    const teacherName = badge.dataset.teacherFullName;
+    const dayLabel = badge.dataset.dayLabel;
+    const lessonNr = badge.dataset.lessonNr;
+    const groupId = badge.dataset.groupId;
+    
+    // Populate modal basic info
+    document.getElementById('modal-time').textContent = `${dayLabel}, ${lessonNr} pamoka`;
+    document.getElementById('modal-teacher').textContent = teacherName;
+    document.getElementById('modal-group').textContent = groupName;
+    document.getElementById('modal-subject').textContent = subjectName;
+    document.getElementById('modal-room').textContent = roomDisplay || 'Nenurodytas';
+    
+    // Show loading states
+    document.getElementById('modal-students-loading').classList.remove('d-none');
+    document.getElementById('modal-students').classList.add('d-none');
+    document.getElementById('modal-conflicts-loading').classList.remove('d-none');
+    document.getElementById('modal-conflicts').classList.add('d-none');
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('lessonDetailsModal'));
+    modal.show();
+    
+    // Load students
+    fetch(`{{ route('schools.timetables.groups.show', [$school, $timetable, '__GROUP_ID__']) }}`.replace('__GROUP_ID__', groupId))
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('modal-students-loading').classList.add('d-none');
+            const studentsDiv = document.getElementById('modal-students');
+            studentsDiv.classList.remove('d-none');
+            
+            if (data.students && data.students.length > 0) {
+                studentsDiv.innerHTML = '<div class="list-group">' + 
+                    data.students.map(s => `<div class="list-group-item"><i class="bi bi-person"></i> ${s.full_name}</div>`).join('') +
+                    '</div>';
+            } else {
+                studentsDiv.innerHTML = '<p class="text-muted">Nėra priskirtų mokinių</p>';
+            }
+        })
+        .catch(err => {
+            document.getElementById('modal-students-loading').classList.add('d-none');
+            document.getElementById('modal-students').classList.remove('d-none');
+            document.getElementById('modal-students').innerHTML = '<p class="text-danger">Klaida kraunant mokinius</p>';
+        });
+    
+    // Load conflicts
+    const day = badge.closest('[data-day]').dataset.day;
+    const slot = badge.closest('[data-slot]').dataset.slot;
+    
+    fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+            group_id: groupId,
+            day_of_week: day,
+            lesson_number: slot
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('modal-conflicts-loading').classList.add('d-none');
+        const conflictsDiv = document.getElementById('modal-conflicts');
+        conflictsDiv.classList.remove('d-none');
+        
+        if (data.conflicts && data.conflicts.length > 0) {
+            conflictsDiv.innerHTML = '<div class="alert alert-warning">' +
+                data.conflicts.map(c => `<div><i class="bi bi-exclamation-triangle"></i> ${c}</div>`).join('') +
+                '</div>';
+        } else {
+            conflictsDiv.innerHTML = '<p class="text-success"><i class="bi bi-check-circle"></i> Konfliktų nėra</p>';
+        }
+    })
+    .catch(err => {
+        document.getElementById('modal-conflicts-loading').classList.add('d-none');
+        document.getElementById('modal-conflicts').classList.remove('d-none');
+        document.getElementById('modal-conflicts').innerHTML = '<p class="text-danger">Klaida tikrinant konfliktus</p>';
+    });
 }
 </script>
 <style>

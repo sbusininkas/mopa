@@ -2,8 +2,6 @@
 
 @section('content')
 <div style="width: 100%;">
-    <div class="row mb-3">
-        <div class="col-md-9">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2><i class="bi bi-calendar3"></i> {{ $timetable->name }} — Mokytojų tvarkaraštis</h2>
         <div class="btn-group">
@@ -13,35 +11,6 @@
             <button id="btnFullscreen" class="btn btn-primary" type="button">
                 <i class="bi bi-arrows-fullscreen"></i> Visas ekranas
             </button>
-        </div>
-    </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card h-100" id="unscheduledPanel">
-                <div class="card-header p-2"><strong>Nesuplanuotos grupės</strong></div>
-                <div class="card-body p-2" style="max-height:220px; overflow:auto;">
-                    @forelse($unscheduled as $u)
-                        <div class="unscheduled-item mb-1" draggable="true"
-                             data-kind="unscheduled"
-                             data-group-id="{{ $u['group_id'] }}"
-                             data-group-name="{{ $u['group_name'] }}"
-                             data-subject-name="{{ $u['subject_name'] }}"
-                             data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
-                             data-teacher-name="{{ $u['teacher_name'] ?? '' }}"
-                             data-remaining="{{ $u['remaining_lessons'] }}">
-                            <span class="badge bg-secondary me-1">{{ $u['group_name'] }}</span>
-                            <span class="badge bg-success">{{ $u['subject_name'] }}</span>
-                            @if(!empty($u['teacher_name']))
-                            <span class="badge bg-dark ms-1">{{ $u['teacher_name'] }}</span>
-                            @endif
-                            <small class="text-muted ms-1">({{ $u['remaining_lessons'] }} liko)</small>
-                        </div>
-                    @empty
-                        <span class="text-muted small">Visos grupės suplanuotos</span>
-                    @endforelse
-                </div>
-                <div class="card-footer p-1 small text-muted">Tempkite ant mokytojo pamokos langelio</div>
-            </div>
         </div>
     </div>
 
@@ -61,10 +30,12 @@
         </div>
     </div>
 
-    <div class="card" id="timetableCard">
-        <div class="card-body p-0">
-            <div id="timetableContainer" data-simplebar data-simplebar-auto-hide="false" style="max-height: calc(100vh - 280px); position: relative; width: 100%;">
-                <table class="table table-hover table-bordered align-middle mb-0" id="teachersGrid">
+    <div class="row">
+        <div class="col-md-9">
+            <div class="card" id="timetableCard">
+                <div class="card-body p-0">
+                    <div id="timetableContainer" data-simplebar data-simplebar-auto-hide="false" style="max-height: calc(100vh - 280px); position: relative; width: 100%;">
+                        <table class="table table-hover table-bordered align-middle mb-0" id="teachersGrid">
                     <thead class="table-dark">
                         <tr>
                             <th rowspan="2" class="text-center align-middle sticky-col" style="width:48px;">#</th>
@@ -118,13 +89,19 @@
                                                     .'</div>';
                                                     $tooltipB64 = base64_encode($tooltipHtml);
                                                 @endphp
-                                                <span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" data-tooltip-b64="{{ $tooltipB64 }}" draggable="true"
+                                                <span class="badge bg-secondary tt-trigger lesson-badge" style="font-size:0.75rem; cursor:pointer;" data-tooltip-b64="{{ $tooltipB64 }}" draggable="true"
                                                       data-kind="scheduled"
                                                       data-slot-id="{{ $cell['slot_id'] }}"
                                                       data-group-id="{{ $cell['group_id'] }}"
                                                       data-teacher-id="{{ $cell['teacher_id'] }}"
                                                       data-group-name="{{ $cell['group'] }}"
                                                       data-subject-name="{{ $cell['subject'] ?? '' }}"
+                                                      data-room-number="{{ $roomNumber ?? '' }}"
+                                                      data-room-name="{{ $roomName ?? '' }}"
+                                                      data-teacher-full-name="{{ $teacherName }}"
+                                                      data-day-label="{{ $dayLabel }}"
+                                                      data-lesson-nr="{{ $lessonNr }}"
+                                                      onclick="showLessonDetails(this, event)"
                                                 >{{ $cell['group'] }}</span>
                                             @else
                                                 <span class="text-muted">—</span>
@@ -136,6 +113,102 @@
                         @endforeach
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100" id="unscheduledPanel">
+                <div class="card-header p-2"><strong>Nesuplanuotos grupės</strong></div>
+                <div class="card-body p-2" style="max-height: calc(100vh - 280px); overflow:auto;">
+                    @forelse($unscheduled as $u)
+                        <div class="unscheduled-item mb-1" draggable="true"
+                             data-kind="unscheduled"
+                             data-group-id="{{ $u['group_id'] }}"
+                             data-group-name="{{ $u['group_name'] }}"
+                             data-subject-name="{{ $u['subject_name'] }}"
+                             data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
+                             data-teacher-name="{{ $u['teacher_name'] ?? '' }}"
+                             data-remaining="{{ $u['remaining_lessons'] }}">
+                            <span class="badge bg-secondary me-1">{{ $u['group_name'] }}</span>
+                            <span class="badge bg-success">{{ $u['subject_name'] }}</span>
+                            @if(!empty($u['teacher_name']))
+                            <span class="badge bg-dark ms-1">{{ $u['teacher_name'] }}</span>
+                            @endif
+                            <small class="text-muted ms-1">({{ $u['remaining_lessons'] }} liko)</small>
+                        </div>
+                    @empty
+                        <span class="text-muted small">Visos grupės suplanuotos</span>
+                    @endforelse
+                </div>
+                <div class="card-footer p-1 small text-muted">Tempkite ant mokytojo pamokos langelio</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lesson Details Modal -->
+<div class="modal fade" id="lessonDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-info-circle"></i> Pamokos informacija
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-clock"></i> Laikas</h6>
+                        <p id="modal-time" class="text-muted"></p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-person-badge"></i> Mokytojas</h6>
+                        <p id="modal-teacher" class="text-muted"></p>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-collection-fill"></i> Grupė</h6>
+                        <p id="modal-group" class="text-muted"></p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-book-half"></i> Dalykas</h6>
+                        <p id="modal-subject" class="text-muted"></p>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6><i class="bi bi-door-closed"></i> Kabinetas</h6>
+                        <p id="modal-room" class="text-muted"></p>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6><i class="bi bi-people"></i> Mokiniai</h6>
+                        <div id="modal-students-loading" class="text-muted">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Kraunama...
+                        </div>
+                        <div id="modal-students" class="d-none"></div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12">
+                        <h6><i class="bi bi-exclamation-triangle"></i> Konfliktai</h6>
+                        <div id="modal-conflicts-loading" class="text-muted">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Kraunama...
+                        </div>
+                        <div id="modal-conflicts" class="d-none"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Uždaryti</button>
             </div>
         </div>
     </div>
@@ -276,14 +349,14 @@ document.addEventListener('DOMContentLoaded', function(){
                 // Check conflicts before saving
                 const conflicts = await checkConflicts(groupId, teacherId, day, slot);
                 // Show confirmation dialog with conflict info
-                if (!await showConfirmDialog(groupName, subjectName, day, slot, conflicts, groupId)) {
+                const confirmation = await showConfirmDialog(groupName, subjectName, day, slot, conflicts, groupId);
+                if (!confirmation) {
                     return; // User cancelled
                 }
-                // If there are blocking conflicts, don't save
-                if (conflicts.hasConflicts) {
-                    flashMessage(conflicts.message, 'danger');
-                    return;
-                }
+                
+                // Determine if force is needed
+                const forceAdd = confirmation === 'force';
+                
                 try {
                     const resp = await fetch(`{{ route('schools.timetables.manual-slot', [$school, $timetable]) }}`, {
                         method: 'POST',
@@ -292,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function(){
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                             'Accept': 'application/json'
                         },
-                        body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, day: day, slot: slot })
+                        body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, day: day, slot: slot, force: forceAdd })
                     });
                     const data = await resp.json();
                     if (!resp.ok || !data.success) {
@@ -428,6 +501,66 @@ document.addEventListener('DOMContentLoaded', function(){
                     }
                     
                     if (!resp.ok || !data.success) {
+                        // Check if error is conflict-related - if so, offer force option
+                        if (data.error && (
+                            data.error.includes('užimtas') || 
+                            data.error.includes('Užimti') ||
+                            data.error.includes('konflikt')
+                        )) {
+                            // Show confirmation with force option
+                            const conflictData = {
+                                hasConflicts: true,
+                                conflicts: [data.error]
+                            };
+                            const confirmation = await showMoveConfirmDialog(groupName, subjectName, day, slot, conflictData);
+                            if (confirmation === 'force') {
+                                // Retry with force flag
+                                const forceResp = await fetch(`{{ route('schools.timetables.move-slot', [$school, $timetable]) }}`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                        'Accept': 'application/json'
+                                    },
+                                    body: JSON.stringify({ slot_id: slotId, teacher_id: teacherId, day: day, slot: slot, swap: false, force: true })
+                                });
+                                const forceData = await forceResp.json();
+                                
+                                if (!forceResp.ok || !forceData.success) {
+                                    showErrorModal('Klaida', forceData.error || 'Nepavyko perkelti pamokos');
+                                    return;
+                                }
+                                
+                                // Update UI after force move
+                                if (originalCell) originalCell.innerHTML = '<span class="text-muted">—</span>';
+                                const tooltipHtml = `<div class=\"tt-inner\">`
+                                  + `<div class=\"tt-row tt-row-head\"><i class=\"bi bi-clock-history tt-ico\"></i><span class=\"tt-val\">${day} • ${slot} pamoka</span></div>`
+                                  + `<div class=\"tt-divider\"></div>`
+                                  + `<div class=\"tt-row\"><i class=\"bi bi-collection-fill tt-ico\"></i><span class=\"tt-val\">${forceData.html.group}</span></div>`
+                                  + `<div class=\"tt-row\"><i class=\"bi bi-book-half tt-ico\"></i><span class=\"tt-val\">${forceData.html.subject ?? '—'}</span></div>`
+                                  + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${forceData.html.room ?? '—'}</span></div>`
+                                  + `</div>`;
+                                const b64 = btoa(unescape(encodeURIComponent(tooltipHtml)));
+                                cell.innerHTML = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" data-tooltip-b64=\"${b64}\" draggable=\"true\"
+                                        data-kind=\"scheduled\"
+                                        data-slot-id=\"${forceData.html.slot_id ?? ''}\"
+                                        data-group-id=\"${groupId}\"
+                                        data-teacher-id=\"${teacherId}\"
+                                        data-group-name=\"${forceData.html.group}\"
+                                        data-subject-name=\"${forceData.html.subject ?? ''}\"
+                                >${forceData.html.group}</span>`;
+                                if (window.bootstrap) {
+                                    const badge = cell.querySelector('.tt-trigger');
+                                    new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+                                    initBadgeDrag(badge);
+                                }
+                                flashMessage('Pamoka perkelta (su konfliktais)', 'warning');
+                                return;
+                            } else {
+                                return; // User cancelled
+                            }
+                        }
+                        
                         showErrorModal('Klaida', data.error || 'Nepavyko perkelti pamokos');
                         return;
                     }
@@ -504,27 +637,25 @@ document.addEventListener('DOMContentLoaded', function(){
             modal.innerHTML = `
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content">
-                        <div class="modal-header ${conflictData.hasConflicts ? 'bg-danger text-white' : 'bg-primary text-white'}">
+                        <div class="modal-header ${conflictData.hasConflicts ? 'bg-warning text-dark' : 'bg-primary text-white'}">
                             <h5 class="modal-title">
                                 <i class="bi ${conflictData.hasConflicts ? 'bi-exclamation-triangle' : 'bi-check-circle'}"></i>
                                 ${conflictData.hasConflicts ? 'Aptikti konfliktai' : 'Patvirtinti pamokos pridėjimą'}
                             </h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            <button type="button" class="btn-close ${conflictData.hasConflicts ? '' : 'btn-close-white'}" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
                             <p class="mb-3"><strong>Grupė:</strong> ${groupName} (${subjectName})</p>
                             <p class="mb-3"><strong>Laikas:</strong> ${day}, ${slot} pamoka</p>
                             ${conflictData.hasConflicts ? `
-                                <div class="alert alert-danger mb-0">
-                                    <strong>Negalima pridėti pamokos:</strong>
+                                <div class="alert alert-warning mb-3">
+                                    <strong><i class="bi bi-exclamation-triangle-fill"></i> Aptikti šie konfliktai:</strong>
                                     <ul class="mb-0 mt-2">
                                         ${conflictsHtml}
                                     </ul>
                                 </div>
-                                <div class="d-flex justify-content-end mt-2">
-                                    <button type="button" class="btn btn-warning" onclick="openEditGroupModal(${groupId || ''}, this)">
-                                        <i class="bi bi-gear"></i> Tvarkyti grupę
-                                    </button>
+                                <div class="alert alert-info mb-0">
+                                    <i class="bi bi-info-circle-fill"></i> <strong>Dėmesio!</strong> Jei pridėsite šią pamoką, bus sukurtas tvarkaraščio konfliktas. Mokytojas, mokiniai arba kabinetas gali būti užimti tuo pačiu metu.
                                 </div>
                             ` : `
                                 <div class="alert alert-success mb-0">
@@ -533,14 +664,16 @@ document.addEventListener('DOMContentLoaded', function(){
                             `}
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                                ${conflictData.hasConflicts ? 'Uždaryti' : 'Atšaukti'}
-                            </button>
-                            ${!conflictData.hasConflicts ? `
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                            ${conflictData.hasConflicts ? `
+                                <button type="button" class="btn btn-warning" id="confirmAddForce">
+                                    <i class="bi bi-exclamation-triangle"></i> Vis tiek pridėti
+                                </button>
+                            ` : `
                                 <button type="button" class="btn btn-primary" id="confirmAdd">
                                     <i class="bi bi-plus-circle"></i> Pridėti
                                 </button>
-                            ` : ''}
+                            `}
                         </div>
                     </div>
                 </div>
@@ -549,7 +682,12 @@ document.addEventListener('DOMContentLoaded', function(){
             const bsModal = new bootstrap.Modal(modal);
             bsModal.show();
             
-            if (!conflictData.hasConflicts) {
+            if (conflictData.hasConflicts) {
+                modal.querySelector('#confirmAddForce').addEventListener('click', () => {
+                    bsModal.hide();
+                    resolve('force'); // Return 'force' to indicate override
+                });
+            } else {
                 modal.querySelector('#confirmAdd').addEventListener('click', () => {
                     bsModal.hide();
                     resolve(true);
@@ -558,7 +696,12 @@ document.addEventListener('DOMContentLoaded', function(){
             
             modal.addEventListener('hidden.bs.modal', () => {
                 modal.remove();
-                resolve(false);
+                if (!modal._resolved) resolve(false);
+            });
+            
+            // Mark as resolved when button clicked
+            modal.addEventListener('hide.bs.modal', () => {
+                modal._resolved = true;
             });
         });
     }
@@ -610,6 +753,77 @@ document.addEventListener('DOMContentLoaded', function(){
             modal.addEventListener('hidden.bs.modal', () => {
                 modal.remove();
                 resolve(false);
+            });
+        });
+    }
+
+    function showMoveConfirmDialog(groupName, subjectName, day, slot, conflictData) {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.tabIndex = -1;
+            
+            // Process conflicts
+            let conflictsHtml = '';
+            if (conflictData.hasConflicts && conflictData.conflicts) {
+                conflictsHtml = conflictData.conflicts.map(c => {
+                    if (typeof c === 'string' && c.startsWith('Užimti mokiniai:')) {
+                        const studentsPart = c.substring('Užimti mokiniai:'.length).trim();
+                        const students = studentsPart.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                        students.sort((a, b) => a.localeCompare(b, 'lt'));
+                        return '<li><strong>Užimti mokiniai:</strong><ul class="mt-1">' + students.map(s => `<li>${s}</li>`).join('') + '</ul></li>';
+                    }
+                    return `<li>${c}</li>`;
+                }).join('');
+            }
+            
+            modal.innerHTML = `
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header bg-warning text-dark">
+                            <h5 class="modal-title">
+                                <i class="bi bi-exclamation-triangle"></i> Aptikti konfliktai
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-3"><strong>Grupė:</strong> ${groupName} (${subjectName})</p>
+                            <p class="mb-3"><strong>Norimas laikas:</strong> ${day}, ${slot} pamoka</p>
+                            <div class="alert alert-warning mb-3">
+                                <strong><i class="bi bi-exclamation-triangle-fill"></i> Aptikti šie konfliktai:</strong>
+                                <ul class="mb-0 mt-2">
+                                    ${conflictsHtml}
+                                </ul>
+                            </div>
+                            <div class="alert alert-info mb-0">
+                                <i class="bi bi-info-circle-fill"></i> <strong>Dėmesio!</strong> Jei perkelsite šią pamoką, bus sukurtas tvarkaraščio konfliktas.
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                            <button type="button" class="btn btn-warning" id="confirmMoveForce">
+                                <i class="bi bi-exclamation-triangle"></i> Vis tiek perkelti
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+            
+            modal.querySelector('#confirmMoveForce').addEventListener('click', () => {
+                bsModal.hide();
+                resolve('force');
+            });
+            
+            modal.addEventListener('hidden.bs.modal', () => {
+                modal.remove();
+                if (!modal._resolved) resolve(false);
+            });
+            
+            modal.addEventListener('hide.bs.modal', () => {
+                modal._resolved = true;
             });
         });
     }
@@ -799,6 +1013,96 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Show lesson details in modal
+function showLessonDetails(badge, event) {
+    event.stopPropagation(); // Prevent drag when clicking
+    
+    const slotId = badge.dataset.slotId;
+    const groupName = badge.dataset.groupName;
+    const subjectName = badge.dataset.subjectName;
+    const roomNumber = badge.dataset.roomNumber;
+    const roomName = badge.dataset.roomName;
+    const teacherName = badge.dataset.teacherFullName;
+    const dayLabel = badge.dataset.dayLabel;
+    const lessonNr = badge.dataset.lessonNr;
+    const groupId = badge.dataset.groupId;
+    
+    // Populate modal basic info
+    document.getElementById('modal-time').textContent = `${dayLabel}, ${lessonNr} pamoka`;
+    document.getElementById('modal-teacher').textContent = teacherName;
+    document.getElementById('modal-group').textContent = groupName;
+    document.getElementById('modal-subject').textContent = subjectName;
+    document.getElementById('modal-room').textContent = roomNumber ? `${roomNumber} ${roomName || ''}` : 'Nenurodytas';
+    
+    // Show loading states
+    document.getElementById('modal-students-loading').classList.remove('d-none');
+    document.getElementById('modal-students').classList.add('d-none');
+    document.getElementById('modal-conflicts-loading').classList.remove('d-none');
+    document.getElementById('modal-conflicts').classList.add('d-none');
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('lessonDetailsModal'));
+    modal.show();
+    
+    // Load students
+    fetch(`{{ route('schools.timetables.groups.show', [$school, $timetable, '__GROUP_ID__']) }}`.replace('__GROUP_ID__', groupId))
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('modal-students-loading').classList.add('d-none');
+            const studentsDiv = document.getElementById('modal-students');
+            studentsDiv.classList.remove('d-none');
+            
+            if (data.students && data.students.length > 0) {
+                studentsDiv.innerHTML = '<div class="list-group">' + 
+                    data.students.map(s => `<div class="list-group-item"><i class="bi bi-person"></i> ${s.full_name}</div>`).join('') +
+                    '</div>';
+            } else {
+                studentsDiv.innerHTML = '<p class="text-muted">Nėra priskirtų mokinių</p>';
+            }
+        })
+        .catch(err => {
+            document.getElementById('modal-students-loading').classList.add('d-none');
+            document.getElementById('modal-students').classList.remove('d-none');
+            document.getElementById('modal-students').innerHTML = '<p class="text-danger">Klaida kraunant mokinius</p>';
+        });
+    
+    // Load conflicts
+    const day = badge.closest('[data-day]').dataset.day;
+    const slot = badge.closest('[data-slot]').dataset.slot;
+    
+    fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+            group_id: groupId,
+            day_of_week: day,
+            lesson_number: slot
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('modal-conflicts-loading').classList.add('d-none');
+        const conflictsDiv = document.getElementById('modal-conflicts');
+        conflictsDiv.classList.remove('d-none');
+        
+        if (data.conflicts && data.conflicts.length > 0) {
+            conflictsDiv.innerHTML = '<div class="alert alert-warning">' +
+                data.conflicts.map(c => `<div><i class="bi bi-exclamation-triangle"></i> ${c}</div>`).join('') +
+                '</div>';
+        } else {
+            conflictsDiv.innerHTML = '<p class="text-success"><i class="bi bi-check-circle"></i> Konfliktų nėra</p>';
+        }
+    })
+    .catch(err => {
+        document.getElementById('modal-conflicts-loading').classList.add('d-none');
+        document.getElementById('modal-conflicts').classList.remove('d-none');
+        document.getElementById('modal-conflicts').innerHTML = '<p class="text-danger">Klaida tikrinant konfliktus</p>';
+    });
+}
 </script>
 
 <style>

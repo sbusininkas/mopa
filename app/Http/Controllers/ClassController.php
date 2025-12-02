@@ -33,9 +33,9 @@ class ClassController extends Controller
         }
 
         $classes = $school->classes()->with('teacher')->paginate(20);
-        $teachers = $school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->get();
+        $teachers = $school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->orderBy('first_name')->get();
 
-        return view('admin.classes.index', compact('school', 'classes', 'teachers'));
+        return view('admin.classes.edit', compact('school', 'class', 'teachers'));
     }
 
     /**

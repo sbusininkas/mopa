@@ -72,6 +72,23 @@ class TimetableGenerator
                     while ($placedForGroup < $target && $loopGuard < ($target * 3)) {
                         foreach ($dayOrder as $day) {
                             if ($placedForGroup >= $target) break;
+                            
+                            // Convert day name to day number (1-5)
+                            $dayNumber = match($day) {
+                                'Mon' => 1,
+                                'Tue' => 2,
+                                'Wed' => 3,
+                                'Thu' => 4,
+                                'Fri' => 5,
+                                default => 0,
+                            };
+                            
+                            // Check if teacher works on this day
+                            if ($group->teacher_login_key_id && !$timetable->isTeacherWorkingOnDay($group->teacher_login_key_id, $dayNumber)) {
+                                $reasonCounters[$group->id]['teacher_not_working'] = ($reasonCounters[$group->id]['teacher_not_working'] ?? 0) + 1;
+                                continue;
+                            }
+                            
                             $subjectCountPerDay[$day] ??= [];
                             $subjectCountPerDay[$day][$group->id] = $subjectCountPerDay[$day][$group->id] ?? 0;
                             $maxSame = $timetable->max_same_subject_per_day ?? 2;
@@ -81,12 +98,20 @@ class TimetableGenerator
                             }
                             $slotList = range(1, $dayCaps[$day]);
                             // For high priority groups (priority >= 3), prefer slots 1-5 first
-                            if (($group->priority ?? 0) >= 3) {
+                            // Never shuffle early slots for priority groups - always try them first
+                            // Only apply priority logic if use_priority_logic is enabled
+                            if (($timetable->use_priority_logic ?? true) && ($group->priority ?? 0) >= 3) {
                                 $earlySlots = array_filter($slotList, fn($s) => $s >= 1 && $s <= 5);
                                 $lateSlots = array_filter($slotList, fn($s) => $s > 5);
+                                // For priority groups: always try early slots first, shuffle late slots only if passes > 0
+                                if ($passes > 0) {
+                                    shuffle($lateSlots);
+                                }
                                 $slotList = array_merge($earlySlots, $lateSlots);
+                            } else {
+                                // For non-priority groups: shuffle all slots after first pass
+                                if ($passes > 0) shuffle($slotList);
                             }
-                            if ($passes > 0) shuffle($slotList);
                             $foundSlot = false;
                             foreach ($slotList as $slot) {
                                 if ($group->teacher_login_key_id && isset($teacherBusy[$day][$slot][$group->teacher_login_key_id])) { $reasonCounters[$group->id]['teacher_conflict'] = ($reasonCounters[$group->id]['teacher_conflict'] ?? 0) + 1; continue; }
@@ -136,6 +161,7 @@ class TimetableGenerator
                 'student_conflict' => 0,
                 'subject_limit' => 0,
                 'no_slot' => 0,
+                'teacher_not_working' => 0,
             ];
             foreach ($groups as $group) {
                 if (($remaining[$group->id] ?? 0) > 0) {
@@ -148,6 +174,7 @@ class TimetableGenerator
                         'student_conflict' => 'Mokiniai užimti',
                         'subject_limit' => 'Per daug tos pačios pamokos tą dieną',
                         'no_slot' => 'Nerastas tinkamas laikas',
+                        'teacher_not_working' => 'Mokytojas nedirba tą dieną',
                     ];
                     $reasonsTranslated = [];
                     foreach ($reasons as $rk => $rv) {
@@ -173,6 +200,7 @@ class TimetableGenerator
                 'student_conflict' => 'Mokiniai užimti',
                 'subject_limit' => 'Per daug tos pačios pamokos tą dieną',
                 'no_slot' => 'Nerastas tinkamas laikas',
+                'teacher_not_working' => 'Mokytojas nedirba tą dieną',
             ];
             $reasonSummaryTranslated = [];
             foreach ($reasonSummary as $k => $v) {

@@ -85,4 +85,37 @@ class AdminApiController extends Controller
 
         return response()->json(['data' => $students]);
     }
+
+    /**
+     * Get all students in the school
+     */
+    public function allStudents($schoolId)
+    {
+        $user = Auth::user();
+        $schoolId = (int) $schoolId;
+
+        // Authorization: supervisors allowed; school admins must match active school and be admin for it
+        if (!$user->isSupervisor()) {
+            $activeSchoolId = (int) session('active_school_id');
+            if (!$activeSchoolId || $activeSchoolId !== $schoolId || !$user->isSchoolAdmin($schoolId)) {
+                abort(403);
+            }
+        }
+
+        $students = LoginKey::where('school_id', $schoolId)
+            ->where('type', 'student')
+            ->with('class')
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get()
+            ->map(function ($lk) {
+                return [
+                    'id' => $lk->id,
+                    'full_name' => $lk->full_name,
+                    'class_name' => $lk->class?->name ?? '',
+                ];
+            });
+
+        return response()->json(['data' => $students]);
+    }
 }

@@ -211,7 +211,7 @@
                         <label class="form-label">Klasės vadovas</label>
                         <select name="teacher_id" id="editTeacherId" class="form-select">
                             <option value="">-- Nepasirinkta --</option>
-                            @foreach($school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->get() as $teacher)
+                            @foreach($school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->orderBy('first_name')->get() as $teacher)
                                 <option value="{{ $teacher->id }}">{{ $teacher->full_name }}</option>
                             @endforeach
                         </select>

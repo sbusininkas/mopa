@@ -62,7 +62,7 @@
                 </select>
                 <select name="teacher_id" id="teacherFilter" class="form-select" style="display: none;">
                     <option value="">-- Visi mokytojai --</option>
-                    @foreach($school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->get() as $teacher)
+                    @foreach($school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->orderBy('first_name')->get() as $teacher)
                         <option value="{{ $teacher->id }}" {{ request('teacher_id') == $teacher->id ? 'selected' : '' }}>
                             {{ $teacher->full_name }}
                         </option>

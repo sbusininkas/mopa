@@ -41,7 +41,13 @@
 
     <!-- Current settings summary -->
     <div class="modern-card mb-3">
-        <div class="modern-card-header"><i class="bi bi-sliders"></i> Dabartiniai nustatymai</div>
+        <div class="modern-card-header d-flex justify-content-between align-items-center">
+            <div><i class="bi bi-sliders"></i> Dabartiniai nustatymai</div>
+            <button type="button" class="btn btn-sm btn-light" style="background-color: white; border: 1px solid #dee2e6;" data-bs-toggle="collapse" data-bs-target="#currentSettingsCollapse">
+                Peržiūrėti
+            </button>
+        </div>
+        <div id="currentSettingsCollapse" class="collapse {{ $timetable->generation_status === 'running' ? 'show' : '' }}">
         <div class="card-body">
             @if($timetable->generation_status === 'running')
                 <div class="mb-3">
@@ -104,13 +110,16 @@
                 </div>
             </div>
         </div>
+        </div>
     </div>
 
     @if($timetable->generation_status === 'completed' && ($timetable->generation_report['unscheduled_count'] ?? 0) > 0)
     <div class="modern-card mb-4">
         <div class="modern-card-header d-flex justify-content-between align-items-center">
             <div><i class="bi bi-exclamation-circle"></i> Nepaskirstytos pamokos</div>
-            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#unscheduledCollapse">Peržiūrėti</button>
+            <button type="button" class="btn btn-sm btn-light" style="background-color: white; border: 1px solid #dee2e6;" data-bs-toggle="collapse" data-bs-target="#unscheduledCollapse">
+                Peržiūrėti
+            </button>
         </div>
         <div id="unscheduledCollapse" class="collapse show">
             <div class="card-body">
@@ -142,12 +151,46 @@
                                 <th>Mokytojas</th>
                                 <th>Likę / Prašyta</th>
                                 <th>Priežastys (top)</th>
+                                <th>Rekomendacija</th>
+                                <th>Veiksmai</th>
                             </tr>
                         </thead>
                         <tbody>
                         @foreach(($timetable->generation_report['unscheduled'] ?? []) as $item)
-                            @php($reasonsTranslated = $item['reasons_translated'] ?? [])
-                            @php($reasons = collect($reasonsTranslated)->filter(fn($v) => ($v['count'] ?? 0) > 0)->sortByDesc(fn($v) => $v['count'] ?? 0)->take(3))
+                            <?php
+                                $reasonsTranslated = $item['reasons_translated'] ?? [];
+                                $reasons = collect($reasonsTranslated)->filter(fn($v) => ($v['count'] ?? 0) > 0)->sortByDesc(fn($v) => $v['count'] ?? 0)->take(3);
+                                
+                                // Sort by count ascending to find easiest to fix FROM THE TOP 3
+                                $sortedReasons = $reasons->sortBy(fn($v) => $v['count'] ?? 0);
+                                $topReason = $sortedReasons->keys()->first();
+                                $recommendation = '';
+                                $recommendationClass = 'text-info';
+                                $conflictCount = $sortedReasons->first()['count'] ?? 0;
+                                
+                                if ($topReason === 'teacher_conflict') {
+                                    $recommendation = '⚡ Lengviausias sprendimas: Pakeiskite mokytoją į turintį daugiau laisvo laiko (' . $conflictCount . ' konfliktai)';
+                                    $recommendationClass = 'text-primary';
+                                } elseif ($topReason === 'room_conflict') {
+                                    $recommendation = '🛋️ Lengviausias sprendimas: Pašalinkite kabineto apribojimą arba pridėkite kabinetą (' . $conflictCount . ' konfliktai)';
+                                    $recommendationClass = 'text-success';
+                                } elseif ($topReason === 'student_conflict') {
+                                    $recommendation = '👥 Lengviausias sprendimas: Sumažinkite mokiniams grupių skaičių (' . $conflictCount . ' konfliktai)';
+                                    $recommendationClass = 'text-warning';
+                                } elseif ($topReason === 'subject_limit') {
+                                    $recommendation = '📚 Lengviausias sprendimas: Padidinkite „Maks. to paties dalyko per dieną“ (' . $conflictCount . ' konfliktai)';
+                                    $recommendationClass = 'text-info';
+                                } elseif ($topReason === 'teacher_not_working') {
+                                    $recommendation = '📅 Lengviausias sprendimas: Pridėkite daugiau darbo dienų mokytojui (' . $conflictCount . ' konfliktai)';
+                                    $recommendationClass = 'text-danger';
+                                } elseif ($topReason === 'no_slot') {
+                                    $recommendation = '⏰ Lengviausias sprendimas: Padidinkite pamokų skaičių per dieną (' . $conflictCount . ' konfliktai)';
+                                    $recommendationClass = 'text-secondary';
+                                } else {
+                                    $recommendation = '✅ Pabandykite generuoti dar kartą';
+                                    $recommendationClass = 'text-muted';
+                                }
+                            ?>
                             <tr>
                                 <td>{{ $item['group_name'] }}</td>
                                 <td>{{ $item['subject_name'] }}</td>
@@ -160,6 +203,19 @@
                                         <span class="text-muted">—</span>
                                     @endforelse
                                 </td>
+                                <td class="small {{ $recommendationClass }}">
+                                    <i class="bi bi-lightbulb"></i> {{ $recommendation }}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editUnscheduledGroup{{ $item['group_id'] }}" title="Redaguoti grupę">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#copyUnscheduledGroup{{ $item['group_id'] }}" title="Kopijuoti nepaskirstytas pamokas">
+                                            <i class="bi bi-files"></i>
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
                         @endforeach
                         </tbody>
@@ -168,6 +224,166 @@
             </div>
         </div>
     </div>
+    
+    <!-- Modals for Unscheduled Groups -->
+    @foreach(($timetable->generation_report['unscheduled'] ?? []) as $item)
+        <!-- Edit Unscheduled Group Modal -->
+        <div class="modal fade" id="editUnscheduledGroup{{ $item['group_id'] }}" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title"><i class="bi bi-pencil"></i> Redaguoti grupę: {{ $item['group_name'] }}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Nepaskirstyta pamokų: <strong>{{ $item['remaining_lessons'] }}</strong> / {{ $item['requested_lessons'] }}
+                        </div>
+                        <form id="editUnscheduledForm{{ $item['group_id'] }}">
+                            @csrf
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Pavadinimas</label>
+                                    <input type="text" name="name" class="form-control" value="{{ $item['group_name'] }}" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Dalykas</label>
+                                    <select name="subject_id" class="form-select">
+                                        <option value="">-- Nepasirinkta --</option>
+                                        @foreach($school->subjects as $subject)
+                                            <option value="{{ $subject->id }}" {{ $item['subject_id'] == $subject->id ? 'selected' : '' }}>{{ $subject->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Mokytojas</label>
+                                    <select name="teacher_login_key_id" class="form-select">
+                                        <option value="">-- Nepasirinkta --</option>
+                                        @foreach($school->loginKeys()->where('type','teacher')->orderBy('last_name')->orderBy('first_name')->get() as $teacher)
+                                            <option value="{{ $teacher->id }}" {{ $item['teacher_login_key_id'] == $teacher->id ? 'selected' : '' }}>{{ $teacher->full_name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Kabinetas</label>
+                                    <select name="room_id" class="form-select">
+                                        <option value="">-- Nepasirinkta --</option>
+                                        @foreach($school->rooms as $room)
+                                            <option value="{{ $room->id }}">{{ $room->number }} {{ $room->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Savaitės tipas</label>
+                                    <select name="week_type" class="form-select" required>
+                                        <option value="all">Kiekviena</option>
+                                        <option value="even">Lyginės</option>
+                                        <option value="odd">Nelyginės</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Pamokų sk./sav.</label>
+                                    <input type="number" name="lessons_per_week" class="form-control" min="1" max="20" value="{{ $item['requested_lessons'] }}" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label d-block">&nbsp;</label>
+                                    <div class="form-check">
+                                        <input type="checkbox" name="is_priority" id="editUnschPriority{{ $item['group_id'] }}" class="form-check-input" value="1">
+                                        <label class="form-check-label" for="editUnschPriority{{ $item['group_id'] }}">
+                                            <i class="bi bi-star"></i> Prioritetinė
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <hr class="my-4">
+                            
+                            <h6 class="mb-3"><i class="bi bi-people"></i> Mokinių sąrašas</h6>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="input-group mb-3">
+                                        <input type="text" class="form-control" id="studentSearchUnsch{{ $item['group_id'] }}" placeholder="Ieškoti mokinių...">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="loadAllStudentsUnsch({{ $item['group_id'] }})">
+                                            <i class="bi bi-arrow-clockwise"></i> Įkelti visus
+                                        </button>
+                                    </div>
+                                    <div id="studentsListUnsch{{ $item['group_id'] }}" style="max-height: 300px; overflow-y: auto;">
+                                        <div class="text-center py-3">
+                                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                                            <p class="text-muted small mt-2">Kraunami mokiniai...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                        <button type="button" class="btn btn-primary" onclick="saveUnscheduledGroup({{ $item['group_id'] }})">
+                            <i class="bi bi-save"></i> Išsaugoti
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Copy Unscheduled Group Modal -->
+        <div class="modal fade" id="copyUnscheduledGroup{{ $item['group_id'] }}" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title"><i class="bi bi-files"></i> Kopijuoti grupę</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <strong>Kopijuojama grupė:</strong> {{ $item['group_name'] }}<br>
+                            <strong>Dalykas:</strong> {{ $item['subject_name'] }}<br>
+                            <strong>Pamokų skaičius:</strong> {{ $item['remaining_lessons'] }} (tik nepaskirstytos)
+                        </div>
+                        
+                        <form id="copyUnscheduledForm{{ $item['group_id'] }}">
+                            @csrf
+                            <div class="row g-3">
+                                <div class="col-md-12">
+                                    <label class="form-label">Naujos grupės pavadinimas</label>
+                                    <input type="text" name="name" class="form-control" value="{{ $item['group_name'] }} (kopija)" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Mokytojas <span class="text-danger">*</span></label>
+                                    <select name="teacher_login_key_id" class="form-select" required>
+                                        <option value="">-- Pasirinkite --</option>
+                                        @foreach($school->loginKeys()->where('type','teacher')->orderBy('last_name')->orderBy('first_name')->get() as $teacher)
+                                            <option value="{{ $teacher->id }}" {{ $item['teacher_login_key_id'] == $teacher->id ? 'selected' : '' }}>{{ $teacher->full_name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Kabinetas <span class="text-danger">*</span></label>
+                                    <select name="room_id" class="form-select" required>
+                                        <option value="">-- Pasirinkite --</option>
+                                        @foreach($school->rooms as $room)
+                                            <option value="{{ $room->id }}">{{ $room->number }} {{ $room->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-warning mt-3 mb-0">
+                                <i class="bi bi-info-circle"></i> <strong>Pastaba:</strong> Bus nukopijuoti visi mokiniai iš originalios grupės.
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                        <button type="button" class="btn btn-success" onclick="confirmCopyGroupWithData({{ $item['group_id'] }}, {{ $item['remaining_lessons'] }})">
+                            <i class="bi bi-check-circle"></i> Sukurti kopiją
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endforeach
     @endif
 
     <!-- Settings Modal -->
@@ -222,6 +438,14 @@
                             <label class="form-label">Maks. to paties dalyko per dieną</label>
                             <input type="number" name="max_same_subject_per_day" class="form-control" min="1" max="20" value="{{ $timetable->max_same_subject_per_day ?? 3 }}">
                         </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input type="checkbox" name="use_priority_logic" id="usePriorityLogic" class="form-check-input" {{ ($timetable->use_priority_logic ?? true) ? 'checked' : '' }}>
+                                <label for="usePriorityLogic" class="form-check-label">
+                                    Naudoti prioritetinų pamokų logiką (pamokos su prioritetu ≥ 3 dėsis į 1-5 pamokas)
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -229,6 +453,31 @@
                     <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Išsaugoti</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Teacher Working Days Management -->
+    <div class="modern-card mb-4">
+        <div class="modern-card-header d-flex justify-content-between align-items-center">
+            <div><i class="bi bi-calendar-week"></i> Mokytojų darbo dienos</div>
+            <button type="button" class="btn btn-sm btn-light" style="background-color: white; border: 1px solid #dee2e6;" data-bs-toggle="collapse" data-bs-target="#teacherWorkingDaysCollapse">
+                Peržiūrėti
+            </button>
+        </div>
+        <div id="teacherWorkingDaysCollapse" class="collapse">
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    <i class="bi bi-info-circle"></i> Čia galite nustatyti, kuriomis dienomis kiekvienas mokytojas dirba šiame tvarkaraštyje. 
+                    Jei nepažymėta nė viena diena, laikoma, kad mokytojas dirba visas dienas.
+                </p>
+                <div id="teachersWorkingDaysList">
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Kraunama...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -257,7 +506,7 @@
                     <label class="form-label">Mokytojas</label>
                     <select name="teacher_login_key_id" class="form-select">
                         <option value="">-- Nepasirinkta --</option>
-                        @foreach($school->loginKeys()->where('type','teacher')->orderBy('last_name')->get() as $teacher)
+                        @foreach($school->loginKeys()->where('type','teacher')->orderBy('last_name')->orderBy('first_name')->get() as $teacher)
                             <option value="{{ $teacher->id }}">{{ $teacher->full_name }}</option>
                         @endforeach
                     </select>
@@ -311,7 +560,7 @@
         <div class="card-body">
             <div id="groupsList">
                 @forelse($groups as $group)
-                            <div class="modern-card mb-2">
+                            <div class="modern-card mb-2" id="group{{ $group->id }}">
                                 <div class="d-flex justify-content-between align-items-center py-2 px-3" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#groupCollapse{{ $group->id }}" aria-expanded="false">
                                     <div class="d-flex align-items-center gap-2">
                                         <strong>{{ $group->name }}</strong>
@@ -423,7 +672,7 @@
                                                 <label class="form-label">Mokytojas</label>
                                                 <select name="teacher_login_key_id" class="form-select">
                                                     <option value="">-- Nepasirinkta --</option>
-                                                    @foreach($school->loginKeys()->where('type','teacher')->orderBy('last_name')->get() as $teacher)
+                                                    @foreach($school->loginKeys()->where('type','teacher')->orderBy('last_name')->orderBy('first_name')->get() as $teacher)
                                                         <option value="{{ $teacher->id }}" {{ $group->teacher_login_key_id == $teacher->id ? 'selected' : '' }}>{{ $teacher->full_name }}</option>
                                                     @endforeach
                                                 </select>
@@ -502,6 +751,326 @@
 </div>
 
 <script>
+// Scroll to group function
+function scrollToGroup(groupId) {
+    const groupElement = document.getElementById('group' + groupId);
+    if (groupElement) {
+        // Scroll to the element
+        groupElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Highlight the group briefly
+        groupElement.style.transition = 'background-color 0.3s';
+        groupElement.style.backgroundColor = '#fff3cd';
+        setTimeout(() => {
+            groupElement.style.backgroundColor = '';
+        }, 2000);
+        
+        // Open the collapse if it's not open
+        const collapseElement = document.getElementById('groupCollapse' + groupId);
+        if (collapseElement && !collapseElement.classList.contains('show')) {
+            const bsCollapse = new bootstrap.Collapse(collapseElement, { toggle: true });
+        }
+    }
+}
+
+// Copy unscheduled group function
+function copyUnscheduledGroup(groupId, unscheduledCount) {
+    if (!confirm('Ar tikrai norite sukurti grupės kopiją su ' + unscheduledCount + ' nepaskirstytomis pamokomis?\n\nNaujoje grupėje:\n- Bus tie patys mokiniai\n- Bus tas pats mokytojas\n- NEBUS priskirtas kabinetas (turėsite patys pasirinkti)\n- Bus ' + unscheduledCount + ' pamokos per savaitę')) {
+        return;
+    }
+
+    const url = '{{ route("schools.timetables.groups.copy-unscheduled", [$school, $timetable, ":groupId"]) }}'.replace(':groupId', groupId);
+    
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            unscheduled_count: unscheduledCount
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            window.location.reload();
+        } else {
+            alert('Klaida: ' + (data.message || 'Nepavyko sukurti kopijos'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Įvyko klaida kopijuojant grupę');
+    });
+}
+
+// Functions for unscheduled group modals
+function loadAllStudentsUnsch(groupId) {
+    const studentsList = document.getElementById('studentsListUnsch' + groupId);
+    
+    fetch(`{{ url('/admin/api/schools') }}/{{ $school->id }}/students`)
+        .then(res => res.json())
+        .then(json => {
+            const items = json.data || [];
+            renderStudentsUnsch(groupId, items);
+        })
+        .catch(e => {
+            studentsList.innerHTML = '<div class="alert alert-danger small">Klaida kraunant mokinius</div>';
+        });
+}
+
+function renderStudentsUnsch(groupId, students) {
+    renderStudentsUnschWithAssigned(groupId, students, []);
+}
+
+function renderStudentsUnschWithAssigned(groupId, students, assignedIds) {
+    const studentsList = document.getElementById('studentsListUnsch' + groupId);
+    
+    if (students.length === 0) {
+        studentsList.innerHTML = '<p class="text-muted small">Mokinių nerasta</p>';
+        return;
+    }
+    
+    // Separate assigned and unassigned students
+    const assignedStudents = students.filter(s => assignedIds.includes(s.id));
+    const unassignedStudents = students.filter(s => !assignedIds.includes(s.id));
+    
+    // Render assigned first, then unassigned
+    const sortedStudents = [...assignedStudents, ...unassignedStudents];
+    
+    let html = '<div class="list-group">';
+    
+    // Add header if there are assigned students
+    if (assignedStudents.length > 0) {
+        html += `
+            <div class="list-group-item bg-success text-white fw-bold small">
+                <i class="bi bi-people-fill"></i> Priskirti mokiniai (${assignedStudents.length})
+            </div>
+        `;
+    }
+    
+    sortedStudents.forEach(student => {
+        const isAssigned = assignedIds.includes(student.id);
+        
+        // Add separator between assigned and unassigned
+        if (isAssigned === false && sortedStudents.indexOf(student) === assignedStudents.length && unassignedStudents.length > 0) {
+            html += `
+                <div class="list-group-item bg-light text-muted fw-bold small">
+                    <i class="bi bi-person-plus"></i> Kiti mokiniai (${unassignedStudents.length})
+                </div>
+            `;
+        }
+        
+        html += `
+            <label class="list-group-item d-flex align-items-center ${isAssigned ? 'border-success border-start border-3' : ''}">
+                <input type="checkbox" class="form-check-input me-2" name="students[]" value="${student.id}" ${isAssigned ? 'checked' : ''}>
+                <div class="flex-grow-1">
+                    <div>${student.full_name} ${isAssigned ? '<i class="bi bi-check-circle-fill text-success ms-1"></i>' : ''}</div>
+                    <small class="text-muted">${student.class_name || ''}</small>
+                </div>
+            </label>
+        `;
+    });
+    html += '</div>';
+    
+    studentsList.innerHTML = html;
+}
+
+// Load students when edit modal opens
+document.addEventListener('DOMContentLoaded', function() {
+    @foreach(($timetable->generation_report['unscheduled'] ?? []) as $item)
+        const editModal{{ $item['group_id'] }} = document.getElementById('editUnscheduledGroup{{ $item['group_id'] }}');
+        const searchInput{{ $item['group_id'] }} = document.getElementById('studentSearchUnsch{{ $item['group_id'] }}');
+        let searchTimeout{{ $item['group_id'] }} = null;
+        let currentAssignedIds{{ $item['group_id'] }} = [];
+        
+        // Search functionality
+        if (searchInput{{ $item['group_id'] }}) {
+            searchInput{{ $item['group_id'] }}.addEventListener('input', function() {
+                clearTimeout(searchTimeout{{ $item['group_id'] }});
+                const query = this.value.trim();
+                
+                if (query.length < 2) {
+                    document.getElementById('studentsListUnsch{{ $item['group_id'] }}').innerHTML = 
+                        '<p class="text-muted small">Įveskite bent 2 simbolius...</p>';
+                    return;
+                }
+                
+                searchTimeout{{ $item['group_id'] }} = setTimeout(() => {
+                    fetch(`{{ url('/admin/api/schools') }}/{{ $school->id }}/students/search?q=${encodeURIComponent(query)}`)
+                        .then(res => res.json())
+                        .then(json => {
+                            const items = json.data || [];
+                            renderStudentsUnschWithAssigned({{ $item['group_id'] }}, items, currentAssignedIds{{ $item['group_id'] }});
+                        })
+                        .catch(e => {
+                            document.getElementById('studentsListUnsch{{ $item['group_id'] }}').innerHTML = 
+                                '<div class="alert alert-danger small">Klaida ieškant</div>';
+                        });
+                }, 300);
+            });
+        }
+        
+        if (editModal{{ $item['group_id'] }}) {
+            editModal{{ $item['group_id'] }}.addEventListener('shown.bs.modal', function() {
+                // Load group's current students
+                fetch('{{ route("schools.timetables.groups.students", [$school, $timetable, $item["group_id"]]) }}')
+                    .then(res => res.json())
+                    .then(data => {
+                        currentAssignedIds{{ $item['group_id'] }} = (data.students || []).map(s => s.id);
+                        
+                        // Load all students
+                        return fetch(`{{ url('/admin/api/schools') }}/{{ $school->id }}/students`)
+                            .then(res => res.json())
+                            .then(json => {
+                                const allStudents = json.data || [];
+                                renderStudentsUnschWithAssigned({{ $item['group_id'] }}, allStudents, currentAssignedIds{{ $item['group_id'] }});
+                            });
+                    })
+                    .catch(e => {
+                        console.error('Error loading students:', e);
+                        document.getElementById('studentsListUnsch{{ $item['group_id'] }}').innerHTML = 
+                            '<div class="alert alert-danger small">Klaida kraunant mokinius</div>';
+                    });
+            });
+        }
+    @endforeach
+});
+
+function saveUnscheduledGroup(groupId) {
+    const form = document.getElementById('editUnscheduledForm' + groupId);
+    const formData = new FormData(form);
+    
+    // Collect selected students
+    const checkboxes = document.querySelectorAll('#studentsListUnsch' + groupId + ' input[type="checkbox"]:checked');
+    const studentIds = Array.from(checkboxes).map(cb => cb.value);
+    
+    const data = {
+        name: formData.get('name'),
+        subject_id: formData.get('subject_id'),
+        teacher_login_key_id: formData.get('teacher_login_key_id'),
+        room_id: formData.get('room_id'),
+        week_type: formData.get('week_type'),
+        lessons_per_week: formData.get('lessons_per_week'),
+        is_priority: formData.get('is_priority') ? 1 : 0,
+        student_ids: studentIds
+    };
+    
+    const url = '{{ route("schools.timetables.groups.update", [$school, $timetable, ":groupId"]) }}'.replace(':groupId', groupId);
+    
+    fetch(url, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success !== false) {
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('editUnscheduledGroup' + groupId));
+            if (modal) modal.hide();
+            
+            // Show success message
+            alert('Grupė sėkmingai atnaujinta!');
+            window.location.reload();
+        } else {
+            alert('Klaida: ' + (result.message || 'Nepavyko išsaugoti grupės'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Įvyko klaida išsaugant grupę');
+    });
+}
+
+function confirmCopyGroup(groupId, unscheduledCount) {
+    const url = '{{ route("schools.timetables.groups.copy-unscheduled", [$school, $timetable, ":groupId"]) }}'.replace(':groupId', groupId);
+    
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            unscheduled_count: unscheduledCount
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('copyUnscheduledGroup' + groupId));
+            if (modal) modal.hide();
+            
+            alert(data.message);
+            window.location.reload();
+        } else {
+            alert('Klaida: ' + (data.message || 'Nepavyko sukurti kopijos'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Įvyko klaida kopijuojant grupę');
+    });
+}
+
+// New function for copy with form data
+function confirmCopyGroupWithData(groupId, unscheduledCount) {
+    const form = document.getElementById('copyUnscheduledForm' + groupId);
+    const formData = new FormData(form);
+    
+    // Validate required fields
+    if (!formData.get('teacher_login_key_id')) {
+        alert('Prašome pasirinkti mokytoją');
+        return;
+    }
+    if (!formData.get('room_id')) {
+        alert('Prašome pasirinkti kabinetą');
+        return;
+    }
+    
+    const data = {
+        name: formData.get('name'),
+        teacher_login_key_id: formData.get('teacher_login_key_id'),
+        room_id: formData.get('room_id'),
+        unscheduled_count: unscheduledCount
+    };
+    
+    const url = '{{ route("schools.timetables.groups.copy-unscheduled", [$school, $timetable, ":groupId"]) }}'.replace(':groupId', groupId);
+    
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('copyUnscheduledGroup' + groupId));
+            if (modal) modal.hide();
+            
+            alert(result.message);
+            window.location.reload();
+        } else {
+            alert('Klaida: ' + (result.message || 'Nepavyko sukurti kopijos'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Įvyko klaida kopijuojant grupę');
+    });
+}
+
 // Success toast
 document.addEventListener('DOMContentLoaded', function() {
     // Enhance assignment forms with loading state
@@ -576,125 +1145,134 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     }
 
-    // Student assignment functionality per group
-    @foreach($groups as $group)
-    const globalSearch{{ $group->id }} = document.getElementById('globalSearch{{ $group->id }}');
-    const classSelect{{ $group->id }} = document.getElementById('classSelect{{ $group->id }}');
-    const studentsList{{ $group->id }} = document.getElementById('studentsList{{ $group->id }}');
-    const assignedTbody{{ $group->id }} = document.getElementById('assignedStudents{{ $group->id }}');
-    const filterInput{{ $group->id }} = document.getElementById('filterInput{{ $group->id }}');
-    let searchTimeout{{ $group->id }} = null;
-
-    // Guard against missing DOM elements
-    if (!globalSearch{{ $group->id }} || !classSelect{{ $group->id }} || !studentsList{{ $group->id }} || !assignedTbody{{ $group->id }} || !filterInput{{ $group->id }}) {
-        console.warn('Timetable group UI elements missing for group {{ $group->id }}');
-        return;
-    }
-
-    // Global search across all students
-    globalSearch{{ $group->id }}.addEventListener('input', function() {
-        clearTimeout(searchTimeout{{ $group->id }});
-        const query = this.value.trim();
+    // Student assignment functionality per group - lazy initialization
+    const initializedGroups = new Set();
+    
+    function initializeGroupListeners(groupId) {
+        if (initializedGroups.has(groupId)) return; // Already initialized
+        initializedGroups.add(groupId);
         
-        if (query.length < 2) {
-            studentsList{{ $group->id }}.innerHTML = '<p class="text-muted small">Įveskite bent 2 simbolius...</p>';
-            studentsList{{ $group->id }}.dataset.items = '[]';
+        const globalSearch = document.getElementById('globalSearch' + groupId);
+        const classSelect = document.getElementById('classSelect' + groupId);
+        const studentsList = document.getElementById('studentsList' + groupId);
+        const assignedTbody = document.getElementById('assignedStudents' + groupId);
+        const filterInput = document.getElementById('filterInput' + groupId);
+        let searchTimeout = null;
+
+        // Guard against missing DOM elements
+        if (!globalSearch || !classSelect || !studentsList || !assignedTbody || !filterInput) {
+            console.warn('Timetable group UI elements missing for group ' + groupId);
             return;
         }
 
-        searchTimeout{{ $group->id }} = setTimeout(async () => {
+        // Global search across all students
+        globalSearch.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            const query = this.value.trim();
+            
+            if (query.length < 2) {
+                studentsList.innerHTML = '<p class="text-muted small">Įveskite bent 2 simbolius...</p>';
+                studentsList.dataset.items = '[]';
+                return;
+            }
+
+            searchTimeout = setTimeout(async () => {
+                try {
+                    studentsList.innerHTML = '<div class="d-flex align-items-center gap-2 text-muted small"><span class="spinner-border spinner-border-sm"></span> Ieškoma...</div>';
+                    const res = await fetch(`{{ url('/admin/api/schools') }}/{{ $school->id }}/students/search?q=${encodeURIComponent(query)}`);
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const json = await res.json();
+                    const items = (json.data || []);
+                    studentsList.dataset.items = JSON.stringify(items);
+                    studentsList.dataset.source = 'global';
+                    renderStudents(groupId, items);
+                    classSelect.value = '';
+                } catch (e) {
+                    studentsList.innerHTML = '<div class="alert alert-danger small">Klaida ieškant</div>';
+                }
+            }, 300);
+        });
+
+        // Class selection
+        classSelect.addEventListener('change', async function() {
+            const classId = this.value;
+            globalSearch.value = '';
+            
+            if (!classId) {
+                studentsList.innerHTML = '<p class="text-muted small">Ieškokite mokinio arba pasirinkite klasę.</p>';
+                studentsList.dataset.items = '[]';
+                return;
+            }
             try {
-                studentsList{{ $group->id }}.innerHTML = '<div class="d-flex align-items-center gap-2 text-muted small"><span class="spinner-border spinner-border-sm"></span> Ieškoma...</div>';
-                const res = await fetch(`{{ url('/admin/api/schools') }}/{{ $school->id }}/students/search?q=${encodeURIComponent(query)}`);
+                classSelect.disabled = true;
+                studentsList.innerHTML = '<div class="d-flex align-items-center gap-2 text-muted small"><span class="spinner-border spinner-border-sm"></span> Kraunama...</div>';
+                const res = await fetch(`{{ url('/admin/api/classes') }}/${classId}/students`);
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const json = await res.json();
                 const items = (json.data || []);
-                studentsList{{ $group->id }}.dataset.items = JSON.stringify(items);
-                studentsList{{ $group->id }}.dataset.source = 'global';
-                renderStudents{{ $group->id }}(items);
-                classSelect{{ $group->id }}.value = '';
+                studentsList.dataset.items = JSON.stringify(items);
+                studentsList.dataset.source = 'class';
+                renderStudents(groupId, items);
+                classSelect.disabled = false;
             } catch (e) {
-                studentsList{{ $group->id }}.innerHTML = '<div class="alert alert-danger small">Klaida ieškant</div>';
+                studentsList.innerHTML = '<div class="alert alert-danger small">Klaida kraunant</div>';
+                classSelect.disabled = false;
             }
-        }, 300);
-    });
+        });
 
-    // Class selection
-    classSelect{{ $group->id }}.addEventListener('change', async function() {
-        const classId = this.value;
-        globalSearch{{ $group->id }}.value = '';
-        
-        if (!classId) {
-            studentsList{{ $group->id }}.innerHTML = '<p class="text-muted small">Ieškokite mokinio arba pasirinkite klasę.</p>';
-            studentsList{{ $group->id }}.dataset.items = '[]';
-            return;
+        // Remove all assigned students
+        const removeAllBtn = document.getElementById('removeAll' + groupId);
+        if (removeAllBtn) {
+            removeAllBtn.addEventListener('click', function() {
+                assignedTbody.innerHTML = '';
+                const checkboxes = studentsList.querySelectorAll('.student-checkbox');
+                checkboxes.forEach(cb => { cb.checked = false; });
+                const selAll = document.getElementById('selectAll' + groupId);
+                if (selAll) selAll.checked = false;
+            });
         }
-        try {
-            classSelect{{ $group->id }}.disabled = true;
-            studentsList{{ $group->id }}.innerHTML = '<div class="d-flex align-items-center gap-2 text-muted small"><span class="spinner-border spinner-border-sm"></span> Kraunama...</div>';
-            const res = await fetch(`{{ url('/admin/api/classes') }}/${classId}/students`);
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const json = await res.json();
-            const items = (json.data || []);
-            studentsList{{ $group->id }}.dataset.items = JSON.stringify(items);
-            studentsList{{ $group->id }}.dataset.source = 'class';
-            renderStudents{{ $group->id }}(items);
-            classSelect{{ $group->id }}.disabled = false;
-        } catch (e) {
-            studentsList{{ $group->id }}.innerHTML = '<div class="alert alert-danger small">Klaida kraunant</div>';
-            classSelect{{ $group->id }}.disabled = false;
-        }
-    });
 
-    // Render students list
-    function renderStudents{{ $group->id }}(items) {
-        const currentFilter = filterInput{{ $group->id }}.value.trim().toLowerCase();
+        // Select all
+        const selectAll = document.getElementById('selectAll' + groupId);
+        if (selectAll) {
+            selectAll.addEventListener('change', function() {
+                const checkboxes = studentsList.querySelectorAll('.student-checkbox');
+                checkboxes.forEach(cb => {
+                    if (cb.checked !== selectAll.checked) {
+                        cb.checked = selectAll.checked;
+                        toggleAssign(groupId, cb);
+                    }
+                });
+            });
+        }
+
+        // Filter results
+        filterInput.addEventListener('input', function() {
+            const items = JSON.parse(studentsList.dataset.items || '[]');
+            renderStudents(groupId, items);
+        });
+    }
+    
+    // Render students list (shared function)
+    function renderStudents(groupId, items) {
+        const studentsList = document.getElementById('studentsList' + groupId);
+        const filterInput = document.getElementById('filterInput' + groupId);
+        const currentFilter = filterInput.value.trim().toLowerCase();
         const toRender = currentFilter ? items.filter(s => (s.full_name || '').toLowerCase().includes(currentFilter)) : items;
         const html = toRender.map(s => `
             <div class="form-check">
-                <input class="form-check-input student-checkbox" type="checkbox" value="${s.id}" data-name="${s.full_name}" data-class="${s.class_name || ''}" onchange="toggleAssign{{ $group->id }}(this)">
+                <input class="form-check-input student-checkbox" type="checkbox" value="${s.id}" data-name="${s.full_name}" data-class="${s.class_name || ''}" onchange="toggleAssign(${groupId}, this)">
                 <label class="form-check-label small">${s.full_name} <span class="text-muted">${s.class_name ? '(' + s.class_name + ')' : ''}</span></label>
             </div>
         `).join('');
-        studentsList{{ $group->id }}.innerHTML = html || '<p class="text-muted small">Nerasta.</p>';
+        studentsList.innerHTML = html || '<p class="text-muted small">Nerasta.</p>';
     }
 
-    // Remove all assigned students
-    const removeAllBtn{{ $group->id }} = document.getElementById('removeAll{{ $group->id }}');
-    if (removeAllBtn{{ $group->id }}) {
-        removeAllBtn{{ $group->id }}.addEventListener('click', function() {
-            assignedTbody{{ $group->id }}.innerHTML = '';
-            const checkboxes = studentsList{{ $group->id }}.querySelectorAll('.student-checkbox');
-            checkboxes.forEach(cb => { cb.checked = false; });
-            const selAll = document.getElementById('selectAll{{ $group->id }}');
-            if (selAll) selAll.checked = false;
-        });
-    }
-
-    // Select all
-    const selectAll{{ $group->id }} = document.getElementById('selectAll{{ $group->id }}');
-    if (selectAll{{ $group->id }}) {
-        selectAll{{ $group->id }}.addEventListener('change', function() {
-            const checkboxes = studentsList{{ $group->id }}.querySelectorAll('.student-checkbox');
-            checkboxes.forEach(cb => {
-                if (cb.checked !== selectAll{{ $group->id }}.checked) {
-                    cb.checked = selectAll{{ $group->id }}.checked;
-                    toggleAssign{{ $group->id }}(cb);
-                }
-            });
-        });
-    }
-
-    // Filter results
-    filterInput{{ $group->id }}.addEventListener('input', function() {
-        const items = JSON.parse(studentsList{{ $group->id }}.dataset.items || '[]');
-        renderStudents{{ $group->id }}(items);
-    });
-
-    // Toggle assign student
-    window['toggleAssign{{ $group->id }}'] = function(cb) {
+    // Toggle assign student (global function)
+    window.toggleAssign = function(groupId, cb) {
+        const assignedTbody = document.getElementById('assignedStudents' + groupId);
         if (cb.checked) {
-            const existing = assignedTbody{{ $group->id }}.querySelector(`input[value="${cb.value}"]`);
+            const existing = assignedTbody.querySelector(`input[value="${cb.value}"]`);
             if (existing) return;
             const row = document.createElement('tr');
             row.innerHTML = `
@@ -702,12 +1280,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 <td>${cb.dataset.name}</td>
                 <td>${cb.dataset.class}</td>
             `;
-            assignedTbody{{ $group->id }}.appendChild(row);
+            assignedTbody.appendChild(row);
         } else {
-            const input = assignedTbody{{ $group->id }}.querySelector(`input[value="${cb.value}"]`);
+            const input = assignedTbody.querySelector(`input[value="${cb.value}"]`);
             if (input) input.closest('tr').remove();
         }
     }
+    
+    // Listen for collapse events to lazy-init groups
+    @foreach($groups as $group)
+    document.getElementById('groupCollapse{{ $group->id }}')?.addEventListener('shown.bs.collapse', function() {
+        initializeGroupListeners({{ $group->id }});
+    });
     @endforeach
 });
 </script>
@@ -773,6 +1357,215 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     } catch (e) { /* no-op */ }
+});
+
+// Teacher Working Days Management
+document.addEventListener('DOMContentLoaded', function() {
+    const teacherWorkingDaysCollapse = document.getElementById('teacherWorkingDaysCollapse');
+    if (!teacherWorkingDaysCollapse) return;
+
+    let teachersData = [];
+    let loaded = false;
+
+    teacherWorkingDaysCollapse.addEventListener('show.bs.collapse', function() {
+        if (loaded) return;
+        loadTeachersWorkingDays();
+    });
+
+    function loadTeachersWorkingDays() {
+        const listContainer = document.getElementById('teachersWorkingDaysList');
+        
+        fetch('{{ route('schools.timetables.all-teachers-working-days', [$school, $timetable]) }}')
+            .then(r => r.json())
+            .then(data => {
+                teachersData = data;
+                loaded = true;
+                renderTeachersList();
+            })
+            .catch(e => {
+                console.error(e);
+                listContainer.innerHTML = '<div class="alert alert-danger">Klaida kraunant mokytojų duomenis</div>';
+            });
+    }
+
+    function renderTeachersList() {
+        const listContainer = document.getElementById('teachersWorkingDaysList');
+        if (teachersData.length === 0) {
+            listContainer.innerHTML = '<p class="text-muted">Šiame tvarkaraštyje nėra priskirtų mokytojų.</p>';
+            return;
+        }
+
+        const dayNames = {
+            1: 'Pirmadienis',
+            2: 'Antradienis',
+            3: 'Trečiadienis',
+            4: 'Ketvirtadienis',
+            5: 'Penktadienis'
+        };
+
+        let html = '<div class="list-group">';
+        
+        teachersData.forEach(teacher => {
+            const allDays = teacher.working_days.length === 0 || teacher.working_days.length === 5;
+            const dayBadges = allDays 
+                ? '<span class="badge bg-success">Visos dienos</span>'
+                : teacher.working_days.sort().map(d => `<span class="badge bg-primary me-1">${dayNames[d]}</span>`).join('');
+
+            html += `
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${teacher.teacher_name}</strong>
+                            <div class="mt-1">${dayBadges}</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="editTeacherWorkingDays(${teacher.teacher_id})">
+                            <i class="bi bi-pencil"></i> Redaguoti
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        listContainer.innerHTML = html;
+    }
+
+    window.editTeacherWorkingDays = function(teacherId) {
+        const teacher = teachersData.find(t => t.teacher_id === teacherId);
+        if (!teacher) return;
+
+        const currentDays = teacher.working_days.length === 0 ? [1, 2, 3, 4, 5] : teacher.working_days;
+
+        const dayNames = {
+            1: 'Pirmadienis',
+            2: 'Antradienis',
+            3: 'Trečiadienis',
+            4: 'Ketvirtadienis',
+            5: 'Penktadienis'
+        };
+
+        let checkboxes = '';
+        for (let day = 1; day <= 5; day++) {
+            const checked = currentDays.includes(day) ? 'checked' : '';
+            checkboxes += `
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="${day}" id="day${day}" ${checked}>
+                    <label class="form-check-label" for="day${day}">${dayNames[day]}</label>
+                </div>
+            `;
+        }
+
+        const modalHtml = `
+            <div class="modal fade" id="teacherWorkingDaysModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title"><i class="bi bi-calendar-week"></i> ${teacher.teacher_name} - Darbo dienos</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted small mb-3">Pasirinkite dienas, kuriomis mokytojas dirba šiame tvarkaraštyje:</p>
+                            ${checkboxes}
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                            <button type="button" class="btn btn-primary" onclick="saveTeacherWorkingDays(${teacherId})">
+                                <i class="bi bi-save"></i> Išsaugoti
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById('teacherWorkingDaysModal');
+        if (existingModal) existingModal.remove();
+
+        // Add modal to body
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('teacherWorkingDaysModal'));
+        modal.show();
+
+        // Remove modal from DOM after hidden
+        document.getElementById('teacherWorkingDaysModal').addEventListener('hidden.bs.modal', function() {
+            this.remove();
+        });
+    };
+
+    window.saveTeacherWorkingDays = function(teacherId) {
+        const selectedDays = [];
+        for (let day = 1; day <= 5; day++) {
+            const checkbox = document.getElementById(`day${day}`);
+            if (checkbox && checkbox.checked) {
+                selectedDays.push(day);
+            }
+        }
+
+        fetch('{{ route('schools.timetables.update-teacher-working-days', [$school, $timetable]) }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                teacher_id: teacherId,
+                working_days: selectedDays
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Update local data
+                const teacher = teachersData.find(t => t.teacher_id === teacherId);
+                if (teacher) {
+                    teacher.working_days = selectedDays;
+                }
+                
+                // Re-render list
+                renderTeachersList();
+
+                // Close modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('teacherWorkingDaysModal'));
+                if (modal) modal.hide();
+
+                // Show success message
+                showToast('Mokytojo darbo dienos atnaujintos', 'success');
+            } else {
+                alert('Klaida išsaugant duomenis');
+            }
+        })
+        .catch(e => {
+            console.error(e);
+            alert('Klaida išsaugant duomenis');
+        });
+    };
+
+    function showToast(message, type = 'success') {
+        const toastHtml = `
+            <div class="position-fixed top-0 end-0 p-3" style="z-index: 1080">
+                <div class="toast align-items-center text-bg-${type} border-0" role="alert">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="bi bi-check-circle me-2"></i>${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', toastHtml);
+        const toastEl = document.body.lastElementChild.querySelector('.toast');
+        const toast = new bootstrap.Toast(toastEl);
+        toast.show();
+        
+        toastEl.addEventListener('hidden.bs.toast', function() {
+            this.closest('.position-fixed').remove();
+        });
+    }
 });
 </script>
 @endpush

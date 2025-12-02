@@ -47,7 +47,7 @@ class TimetableGroupController extends Controller
                 'is_priority' => $group->is_priority ? true : false,
             ],
             'subjects' => $school->subjects->map(fn($s) => ['id' => $s->id, 'name' => $s->name]),
-            'teachers' => $school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->get()->map(fn($t) => ['id' => $t->id, 'full_name' => $t->full_name]),
+            'teachers' => $school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->orderBy('first_name')->get()->map(fn($t) => ['id' => $t->id, 'full_name' => $t->full_name]),
             'rooms' => $school->rooms->map(fn($r) => ['id' => $r->id, 'number' => $r->number, 'name' => $r->name]),
         ]);
     }
@@ -63,9 +63,18 @@ class TimetableGroupController extends Controller
             'week_type' => 'required|in:all,even,odd',
             'lessons_per_week' => 'required|integer|min:1|max:20',
             'is_priority' => 'nullable|boolean',
+            'student_ids' => 'nullable|array',
+            'student_ids.*' => 'exists:login_keys,id',
         ]);
         $validated['is_priority'] = $request->has('is_priority');
-        $group->update($validated);
+        
+        // Update group
+        $group->update(collect($validated)->except(['student_ids'])->toArray());
+        
+        // Sync students if provided
+        if (isset($validated['student_ids'])) {
+            $group->students()->sync($validated['student_ids']);
+        }
         
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json(['success' => true, 'message' => 'Grupė atnaujinta']);
@@ -81,6 +90,27 @@ class TimetableGroupController extends Controller
         return redirect()->back()->with('success', 'Grupė pašalinta');
     }
 
+    public function show(School $school, Timetable $timetable, TimetableGroup $group)
+    {
+        abort_unless($timetable->school_id === $school->id && $group->timetable_id === $timetable->id, 404);
+        
+        $group->load(['students', 'subject', 'teacherLoginKey', 'room']);
+        
+        return response()->json([
+            'group' => [
+                'id' => $group->id,
+                'name' => $group->name,
+                'subject' => $group->subject?->name,
+                'teacher' => $group->teacherLoginKey?->full_name,
+                'room' => $group->room ? ($group->room->number . ' ' . ($group->room->name ?? '')) : null,
+            ],
+            'students' => $group->students->map(fn($s) => [
+                'id' => $s->id,
+                'full_name' => $s->full_name
+            ])
+        ]);
+    }
+
     public function assignStudents(Request $request, School $school, Timetable $timetable, TimetableGroup $group)
     {
         abort_unless($timetable->school_id === $school->id && $group->timetable_id === $timetable->id, 404);
@@ -93,5 +123,57 @@ class TimetableGroupController extends Controller
         // sync to fully reflect selection, allowing removal when empty
         $group->students()->sync($ids);
         return redirect()->back()->with('success', 'Priskyrimai atnaujinti');
+    }
+
+    public function getStudents(School $school, Timetable $timetable, TimetableGroup $group)
+    {
+        abort_unless($timetable->school_id === $school->id && $group->timetable_id === $timetable->id, 404);
+        
+        $students = $group->students()->get()->map(function($student) {
+            return [
+                'id' => $student->id,
+                'full_name' => $student->full_name,
+                'class_name' => $student->class_name ?? ''
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'students' => $students
+        ]);
+    }
+
+    public function copyUnscheduled(Request $request, School $school, Timetable $timetable, TimetableGroup $group)
+    {
+        abort_unless($timetable->school_id === $school->id && $group->timetable_id === $timetable->id, 404);
+        
+        $validated = $request->validate([
+            'unscheduled_count' => 'required|integer|min:1|max:20',
+            'name' => 'nullable|string|max:100',
+            'teacher_login_key_id' => 'nullable|exists:login_keys,id',
+            'room_id' => 'nullable|exists:rooms,id',
+        ]);
+
+        // Create a copy of the group with only unscheduled lessons
+        $newGroup = $timetable->groups()->create([
+            'name' => $validated['name'] ?? ($group->name . ' (kopija)'),
+            'subject_id' => $group->subject_id,
+            'teacher_login_key_id' => $validated['teacher_login_key_id'] ?? $group->teacher_login_key_id,
+            'room_id' => $validated['room_id'] ?? null,
+            'week_type' => $group->week_type,
+            'lessons_per_week' => $validated['unscheduled_count'],
+            'is_priority' => $group->is_priority,
+            'priority' => $group->priority,
+        ]);
+
+        // Copy students from original group
+        $studentIds = $group->students()->pluck('login_keys.id')->toArray();
+        $newGroup->students()->sync($studentIds);
+
+        return response()->json([
+            'success' => true, 
+            'message' => 'Grupės kopija sukurta su ' . $validated['unscheduled_count'] . ' pamokomis.',
+            'group_id' => $newGroup->id
+        ]);
     }
 }

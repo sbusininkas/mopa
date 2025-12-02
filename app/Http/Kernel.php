@@ -14,5 +14,6 @@ class Kernel extends HttpKernel
     protected $routeMiddleware = [
         // ...existing code...
         'school.admin.or.supervisor' => \App\Http\Middleware\SchoolAdminOrSupervisor::class,
+        'active.school' => \App\Http\Middleware\LoadActiveSchool::class,
     ];
 }

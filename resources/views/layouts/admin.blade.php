@@ -18,6 +18,97 @@
         body {
             background-color: #f7f7ff;
         }
+        
+        /* Modern Navbar Styles */
+        .navbar-modern {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            padding: 0.75rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1030;
+            backdrop-filter: blur(10px);
+        }
+        
+        .navbar-modern .navbar-brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .navbar-modern .navbar-brand:hover {
+            transform: translateY(-2px);
+            text-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        
+        .navbar-modern .nav-link {
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
+            transition: all 0.3s ease;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            margin: 0 0.25rem;
+        }
+        
+        .navbar-modern .nav-link:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .navbar-modern .dropdown-menu {
+            border: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            border-radius: 12px;
+            margin-top: 0.5rem;
+            animation: fadeInDown 0.3s ease;
+        }
+        
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .navbar-modern .dropdown-item {
+            padding: 0.75rem 1.25rem;
+            transition: all 0.2s ease;
+            border-radius: 8px;
+            margin: 0.25rem 0.5rem;
+        }
+        
+        .navbar-modern .dropdown-item:hover {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            transform: translateX(5px);
+        }
+        
+        .navbar-modern .dropdown-item i {
+            width: 20px;
+            margin-right: 8px;
+        }
+        
+        /* Notification Badge */
+        .notification-badge {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+        }
+        
         .admin-container {
             display: flex;
             gap: 1rem;
@@ -58,6 +149,18 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
+        .sidebar-divider {
+            border: 0;
+            border-top: 1px solid #e0e0e0;
+            margin: 1rem 1.5rem;
+        }
+        .admin-sidebar .nav-link.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .admin-sidebar .alert {
+            font-size: 0.85rem;
+        }
         .admin-content {
             flex: 1;
             background: white;
@@ -68,22 +171,25 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/"><i class="bi bi-speedometer2"></i> Mokyklos Valdymas</a>
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-modern">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center" href="{{ route('dashboard') }}">
+                <i class="bi bi-speedometer2 me-2"></i>
+                <span>MOPA</span>
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav ms-auto align-items-center">
                     @auth
-                        <li class="nav-item me-3">
+                        <li class="nav-item me-2">
                             @include('partials.active_school')
                         </li>
-                        <li class="nav-item dropdown me-3">
-                            <a class="nav-link position-relative" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-bell fs-5"></i>
-                                <span id="notificationBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display: none;">
+                        <li class="nav-item dropdown me-2">
+                            <a class="nav-link position-relative d-flex align-items-center" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-bell-fill fs-5"></i>
+                                <span id="notificationBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge" style="display: none;">
                                     0
                                 </span>
                             </a>
@@ -112,14 +218,19 @@
                             </ul>
                         </li>
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-person-circle"></i> {{ Auth::user()->name }}
+                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-person-circle fs-5 me-2"></i>
+                                <span>{{ Auth::user()->name }}</span>
                             </a>
-                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown" style="min-width: 220px;">
+                                <li class="px-3 py-2 border-bottom">
+                                    <small class="text-muted d-block">Prisijungęs kaip</small>
+                                    <strong>{{ Auth::user()->name }}</strong>
+                                </li>
                                 <li><a class="dropdown-item" href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
                                 <li><a class="dropdown-item" href="{{ route('profile.my-schools') }}"><i class="bi bi-building"></i> Mano mokyklos</a></li>
                                 <li><a class="dropdown-item" href="{{ route('profile.activate-key') }}"><i class="bi bi-key"></i> Suaktyvinti raktą</a></li>
-                                <li><hr class="dropdown-divider"></li>
+                                <li><hr class="dropdown-divider my-2"></li>
                                 <li>
                                     <form method="POST" action="{{ route('logout') }}" style="display: inline;">
                                         @csrf
@@ -139,7 +250,13 @@
     <div class="container-fluid">
         @auth
             @php
+                // Get current school from multiple sources
                 $currentSchool = $school ?? $activeSchool ?? null;
+                
+                // If not set, try to get from session (for supervisor)
+                if (!$currentSchool && session('active_school_id')) {
+                    $currentSchool = \App\Models\School::find(session('active_school_id'));
+                }
             @endphp
             @if($currentSchool)
             <div class="admin-container">
@@ -190,13 +307,13 @@
                             const message = notification.data.message || 'Naujas pranešimas';
                             html += `
                                 <li>
-                                    <a class="dropdown-item" href="{{ route('notifications.index') }}">
+                                    <a class="dropdown-item" href="{{ route('notifications.index') }}" style="white-space: normal;">
                                         <div class="d-flex justify-content-between align-items-start">
-                                            <div class="flex-grow-1">
+                                            <div class="flex-grow-1 me-2" style="overflow-wrap: break-word; word-wrap: break-word; word-break: break-word;">
                                                 <div class="fw-bold small">${notification.type}</div>
                                                 <div class="text-muted small">${message}</div>
                                             </div>
-                                            <span class="badge bg-primary ms-2">Naujas</span>
+                                            <span class="badge bg-primary flex-shrink-0">Naujas</span>
                                         </div>
                                         <div class="text-muted" style="font-size: 0.7rem;">${notification.created_at}</div>
                                     </a>

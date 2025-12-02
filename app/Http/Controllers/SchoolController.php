@@ -50,11 +50,18 @@ class SchoolController extends Controller
             session(['active_school_id' => $school->id]);
         }
         
-        $school->load(['classes', 'loginKeys.user', 'loginKeys.class']);
+        $school->load(['classes', 'loginKeys.user', 'loginKeys.class', 'timetables']);
         
-        $schoolYears = SchoolYearHelper::getAvailableYears();
+        // Calculate statistics
+        $stats = [
+            'classes_count' => $school->classes->count(),
+            'students_count' => $school->loginKeys()->where('type', 'student')->where('used', true)->count(),
+            'teachers_count' => $school->loginKeys()->where('type', 'teacher')->where('used', true)->count(),
+            'timetables_count' => $school->timetables->count(),
+            'active_timetables_count' => $school->timetables()->where('is_public', true)->count(),
+        ];
 
-        return view('admin.schools.dashboard', compact('school', 'schoolYears'));
+        return view('admin.schools.dashboard', compact('school', 'stats'));
     }
 
     public function create()
