@@ -295,7 +295,53 @@ class TimetableController extends Controller
                 $parts = ['grupė ' . $occupantGroup];
                 if ($occupantSubject) { $parts[] = 'dalykas ' . $occupantSubject; }
                 $parts[] = 'mokytojas ' . $occupantTeacher;
-                return response()->json(['error' => $roomName . ' tuo metu užimtas: ' . implode(', ', $parts)], 422);
+                
+                // Get list of available rooms (not occupied at this time)
+                $occupiedRoomIds = $timetable->slots()
+                    ->where('day', $day)
+                    ->where('slot', $slot)
+                    ->with('group')
+                    ->get()
+                    ->pluck('group.room_id')
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->toArray();
+                
+                $availableRooms = \App\Models\Room::where('school_id', $school->id)
+                    ->whereNotIn('id', $occupiedRoomIds)
+                    ->orderBy('number')
+                    ->get()
+                    ->map(fn($r) => [
+                        'id' => $r->id,
+                        'number' => $r->number,
+                        'name' => $r->name,
+                        'label' => $r->number . ' ' . $r->name,
+                    ])
+                    ->toArray();
+                
+                return response()->json([
+                    'conflict_type' => 'room',
+                    'error' => $roomName . ' tuo metu užimtas: ' . implode(', ', $parts),
+                    'current_room' => [
+                        'id' => $group->room_id,
+                        'number' => $group->room->number ?? '',
+                        'name' => $group->room->name ?? '',
+                    ],
+                    'available_rooms' => $availableRooms,
+                    'group' => [
+                        'id' => $group->id,
+                        'name' => $group->name,
+                        'subject_name' => $group->subject?->name,
+                        'teacher_name' => $group->teacherLoginKey?->full_name,
+                        'lessons_per_week' => $group->lessons_per_week,
+                    ],
+                    'slot_info' => [
+                        'day' => $day,
+                        'slot' => $slot,
+                        'teacher_id' => $validated['teacher_id'],
+                    ],
+                ], 422);
             }
             if ($eg) {
                 $studentIds = $group->students->pluck('id')->flip();
@@ -344,6 +390,11 @@ class TimetableController extends Controller
             $report['unscheduled_count'] = count($filtered);
             $timetable->update(['generation_report' => $report]);
         }
+        
+        // Calculate remaining lessons for this group
+        $scheduledCount = $timetable->slots()->where('timetable_group_id', $group->id)->count();
+        $remainingLessons = max(0, ($group->lessons_per_week ?? 0) - $scheduledCount);
+        
         return response()->json([
             'success' => true,
             'html' => [
@@ -353,6 +404,179 @@ class TimetableController extends Controller
                 'slot_id' => $slotModel->id,
                 'teacher_id' => $group->teacherLoginKey?->id,
                 'teacher_name' => $group->teacherLoginKey?->full_name,
+            ],
+            'group_id' => $group->id,
+            'remaining_lessons' => $remainingLessons,
+            'group_data' => [
+                'group_id' => $group->id,
+                'group_name' => $group->name,
+                'subject_name' => $group->subject?->name,
+                'teacher_login_key_id' => $group->teacher_login_key_id,
+                'teacher_name' => $group->teacherLoginKey?->full_name,
+            ],
+        ]);
+    }
+
+    public function storeManualSlotWithAlternativeRoom(Request $request, School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $validated = $request->validate([
+            'group_id' => 'required|integer',
+            'day' => 'required|string',
+            'slot' => 'required|integer|min:1',
+            'teacher_id' => 'required|integer',
+            'alternative_room_id' => 'required|integer',
+        ]);
+        
+        // Get original group
+        $originalGroup = $timetable->groups()->with(['subject','teacherLoginKey','students','room'])->find($validated['group_id']);
+        if (!$originalGroup) {
+            return response()->json(['error' => 'Grupė nerasta'], 404);
+        }
+        
+        // Verify room exists and belongs to school
+        $newRoom = \App\Models\Room::where('id', $validated['alternative_room_id'])
+            ->where('school_id', $school->id)
+            ->first();
+        if (!$newRoom) {
+            return response()->json(['error' => 'Kabinetas nerastas'], 404);
+        }
+        
+        // Check if room is available at this time
+        $day = $validated['day'];
+        $slot = (int)$validated['slot'];
+        $roomOccupied = $timetable->slots()
+            ->where('day', $day)
+            ->where('slot', $slot)
+            ->whereHas('group', function($q) use ($newRoom) {
+                $q->where('room_id', $newRoom->id);
+            })
+            ->exists();
+            
+        if ($roomOccupied) {
+            return response()->json(['error' => 'Pasirinktas kabinetas tuo metu užimtas'], 422);
+        }
+        
+        // Create new group with alternative room and reduced lesson count
+        $scheduledCount = $timetable->slots()->where('timetable_group_id', $originalGroup->id)->count();
+        $remainingOriginal = max(0, ($originalGroup->lessons_per_week ?? 0) - $scheduledCount);
+        
+        if ($remainingOriginal <= 0) {
+            return response()->json(['error' => 'Originaliai grupei neliko neplanuojamų pamokų'], 422);
+        }
+        
+        $newGroup = $timetable->groups()->create([
+            'name' => $originalGroup->name,
+            'subject_id' => $originalGroup->subject_id,
+            'teacher_login_key_id' => $originalGroup->teacher_login_key_id,
+            'room_id' => $newRoom->id,
+            'week_type' => $originalGroup->week_type,
+            'lessons_per_week' => 1, // Only one lesson for this slot
+            'is_priority' => $originalGroup->is_priority,
+        ]);
+        
+        // Copy students from original group
+        $studentIds = $originalGroup->students()->pluck('login_keys.id')->toArray();
+        $newGroup->students()->sync($studentIds);
+        
+        // Perform all the same conflict checks as storeManualSlot
+        if (!$newGroup->teacherLoginKey || $newGroup->teacherLoginKey->id != $validated['teacher_id']) {
+            $newGroup->delete();
+            return response()->json(['error' => 'Grupės mokytojas nesutampa su eilute'], 422);
+        }
+        
+        // Check teacher conflict
+        $existing = $timetable->slots()->where('day',$day)->where('slot',$slot)->with(['group.teacherLoginKey','group.room','group.students','group.subject'])->get();
+        foreach ($existing as $ex) {
+            $eg = $ex->group;
+            if ($eg && $eg->teacher_login_key_id === $newGroup->teacher_login_key_id) {
+                $newGroup->delete();
+                return response()->json(['error' => 'Mokytojas tuo laiku užimtas'], 422);
+            }
+            
+            // Check student conflicts
+            if ($eg) {
+                $studentIds = $newGroup->students->pluck('id')->flip();
+                $conflictingStudents = [];
+                foreach ($eg->students as $st) {
+                    if (isset($studentIds[$st->id])) {
+                        $conflictingStudents[] = $st->full_name . ' (' . $eg->name . ')';
+                    }
+                }
+                if (!empty($conflictingStudents)) {
+                    $newGroup->delete();
+                    return response()->json([
+                        'error' => 'Užimti mokiniai: ' . implode(', ', $conflictingStudents)
+                    ], 422);
+                }
+            }
+        }
+        
+        // Subject per day limit
+        $sameDayCount = $timetable->slots()->where('timetable_group_id',$newGroup->id)->where('day',$day)->count();
+        $maxSame = $timetable->max_same_subject_per_day ?? 2;
+        if ($sameDayCount >= $maxSame) {
+            $newGroup->delete();
+            return response()->json(['error' => 'Viršytas pamokų skaičius tos pačios disciplinos tą dieną'], 422);
+        }
+        
+        // Insert slot for new group
+        $slotModel = $timetable->slots()->create([
+            'timetable_group_id' => $newGroup->id,
+            'day' => $day,
+            'slot' => $slot,
+        ]);
+        
+        // Reduce lessons_per_week for original group
+        $originalGroup->update([
+            'lessons_per_week' => max(0, ($originalGroup->lessons_per_week ?? 0) - 1)
+        ]);
+        
+        // Update generation_report for original group
+        $report = $timetable->generation_report ?? [];
+        if (isset($report['unscheduled'])) {
+            foreach ($report['unscheduled'] as &$u) {
+                if (($u['group_id'] ?? null) == $originalGroup->id && ($u['remaining_lessons'] ?? 0) > 0) {
+                    $u['remaining_lessons'] = max(0, $u['remaining_lessons'] - 1);
+                }
+            }
+            unset($u);
+            
+            // Recalculate counts
+            $report['unscheduled_units'] = 0;
+            $filtered = [];
+            foreach ($report['unscheduled'] as $entry) {
+                $report['unscheduled_units'] += $entry['remaining_lessons'] ?? 0;
+                if (($entry['remaining_lessons'] ?? 0) > 0) { $filtered[] = $entry; }
+            }
+            $report['unscheduled'] = $filtered;
+            $report['unscheduled_count'] = count($filtered);
+            $timetable->update(['generation_report' => $report]);
+        }
+        
+        // Calculate remaining for original group
+        $scheduledCountAfter = $timetable->slots()->where('timetable_group_id', $originalGroup->id)->count();
+        $remainingLessons = max(0, ($originalGroup->lessons_per_week ?? 0) - $scheduledCountAfter);
+        
+        return response()->json([
+            'success' => true,
+            'html' => [
+                'group' => $newGroup->name,
+                'subject' => $newGroup->subject?->name,
+                'room' => $newRoom->number . ' ' . $newRoom->name,
+                'slot_id' => $slotModel->id,
+                'teacher_id' => $newGroup->teacherLoginKey?->id,
+                'teacher_name' => $newGroup->teacherLoginKey?->full_name,
+            ],
+            'group_id' => $originalGroup->id, // Return original group ID for frontend update
+            'remaining_lessons' => $remainingLessons,
+            'group_data' => [
+                'group_id' => $originalGroup->id,
+                'group_name' => $originalGroup->name,
+                'subject_name' => $originalGroup->subject?->name,
+                'teacher_login_key_id' => $originalGroup->teacher_login_key_id,
+                'teacher_name' => $originalGroup->teacherLoginKey?->full_name,
             ],
         ]);
     }
@@ -655,6 +879,7 @@ class TimetableController extends Controller
             'slot' => 'required|integer|min:1',
             'teacher_id' => 'required|integer',
             'temp_room_id' => 'nullable|integer|exists:rooms,id',
+            'check_room_id' => 'nullable|integer|exists:rooms,id',
         ]);
         
         $group = $timetable->groups()->with(['subject','teacherLoginKey','students','room'])->find($validated['group_id']);
@@ -662,8 +887,8 @@ class TimetableController extends Controller
             return response()->json(['hasConflicts' => true, 'conflicts' => ['Grupė nerasta'], 'message' => 'Grupė nerasta']);
         }
         
-        // Use temporary room ID if provided, otherwise use group's room
-        $checkRoomId = $validated['temp_room_id'] ?? $group->room_id;
+        // Use check_room_id if provided (for alternative room checking), otherwise temp_room_id, otherwise use group's room
+        $checkRoomId = $validated['check_room_id'] ?? $validated['temp_room_id'] ?? $group->room_id;
         
         $conflicts = [];
         $day = $validated['day'];
@@ -745,10 +970,13 @@ class TimetableController extends Controller
         }
         
         if ($roomConflict) {
-            // Get room name - use temp room if provided, otherwise use group's room
+            // Get room name - use check_room_id if provided, otherwise temp_room_id, otherwise use group's room
             $roomName = 'Kabinetas';
             if ($checkRoomId) {
-                if (isset($validated['temp_room_id']) && $validated['temp_room_id']) {
+                if (isset($validated['check_room_id']) && $validated['check_room_id']) {
+                    $tempRoom = \App\Models\Room::find($validated['check_room_id']);
+                    $roomName = $tempRoom ? ($tempRoom->number . ' ' . $tempRoom->name) : 'Kabinetas';
+                } else if (isset($validated['temp_room_id']) && $validated['temp_room_id']) {
                     $tempRoom = \App\Models\Room::find($validated['temp_room_id']);
                     $roomName = $tempRoom ? ($tempRoom->number . ' ' . $tempRoom->name) : 'Kabinetas';
                 } else if ($group->room) {
@@ -808,6 +1036,156 @@ class TimetableController extends Controller
             'hasConflicts' => $hasConflicts,
             'conflicts' => $conflicts,
             'message' => $message,
+        ]);
+    }
+
+    public function bulkCheckConflicts(Request $request, School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        $validated = $request->validate([
+            'group_id' => 'required|integer',
+            'teacher_id' => 'required|integer',
+            'items' => 'required|array',
+            'items.*.day' => 'required|string',
+            'items.*.slot' => 'required|integer|min:1',
+            'temp_room_id' => 'nullable|integer|exists:rooms,id',
+        ]);
+
+        $group = $timetable->groups()->with(['subject','teacherLoginKey','students','room'])->find($validated['group_id']);
+        if (!$group) {
+            return response()->json(['error' => 'Grupė nerasta', 'items' => []], 422);
+        }
+        if (!$group->teacherLoginKey) {
+            return response()->json(['error' => 'Grupei nepriskirtas mokytojas', 'items' => []], 422);
+        }
+        if ((int)$group->teacher_login_key_id !== (int)$validated['teacher_id']) {
+            return response()->json(['error' => 'Mokytojo eilutė nesutampa', 'items' => []], 422);
+        }
+
+        $checkRoomId = $validated['temp_room_id'] ?? $group->room_id;
+        $needed = max(1,(int)($group->lessons_per_week ?? 1));
+        $scheduledCount = $timetable->slots()->where('timetable_group_id', $group->id)->count();
+        $subjectPerDayLimit = $timetable->max_same_subject_per_day ?? 2;
+
+        // Build OR conditions for all items (limit reasonable size)
+        $items = $validated['items'];
+        if (count($items) > 150) { // safety
+            return response()->json(['error' => 'Per daug elementų vienu metu'], 422);
+        }
+
+        // Collect unique (day, slot)
+        $uniqueCombos = [];
+        foreach ($items as $it) {
+            $key = $it['day'].'|'.$it['slot'];
+            $uniqueCombos[$key] = $it;
+        }
+        $query = $timetable->slots()->with(['group.teacherLoginKey','group.room','group.students','group.subject']);
+        $query->where(function($q) use ($uniqueCombos) {
+            $first = true;
+            foreach ($uniqueCombos as $combo) {
+                if ($first) {
+                    $q->where(function($qq) use ($combo){ $qq->where('day',$combo['day'])->where('slot',$combo['slot']); });
+                    $first = false;
+                } else {
+                    $q->orWhere(function($qq) use ($combo){ $qq->where('day',$combo['day'])->where('slot',$combo['slot']); });
+                }
+            }
+        });
+        $existingSlots = $query->get();
+
+        // Group existing slots by key
+        $byKey = [];
+        foreach ($existingSlots as $slotModel) {
+            $k = $slotModel->day.'|'.$slotModel->slot;
+            $byKey[$k][] = $slotModel;
+        }
+
+        // Pre-calc subject per day count
+        $subjectDayCounts = [];
+        foreach ($items as $it) {
+            $subjectDayCounts[$it['day']] = $timetable->slots()->where('day',$it['day'])->whereHas('group', function($q) use ($group){ $q->where('id',$group->id); })->count();
+        }
+
+        $results = [];
+        foreach ($items as $it) {
+            $day = $it['day'];
+            $slot = (int)$it['slot'];
+            $key = $day.'|'.$slot;
+            $conflictsRaw = [];
+            $teacherConflict = false;
+            $roomConflict = false;
+            $studentConflicts = [];
+            $roomConflictDetails = null;
+
+            $existing = $byKey[$key] ?? [];
+            foreach ($existing as $ex) {
+                $eg = $ex->group; if (!$eg) continue;
+                if ($eg->teacher_login_key_id === $group->teacher_login_key_id) { $teacherConflict = true; }
+                if ($checkRoomId && $eg->room_id === $checkRoomId) {
+                    $roomConflict = true;
+                    if ($roomConflictDetails === null) {
+                        $roomConflictDetails = [
+                            'group' => $eg->name ?? null,
+                            'teacher' => $eg->teacherLoginKey?->full_name ?? null,
+                            'subject' => $eg->subject?->name ?? null,
+                        ];
+                    }
+                }
+                $studentIds = $group->students->pluck('id')->flip();
+                foreach ($eg->students as $st) {
+                    if (isset($studentIds[$st->id])) {
+                        $studentConflicts[] = [
+                            'name' => $st->full_name ?? "ID: {$st->id}",
+                            'group' => $eg->name ?? 'nežinoma grupė',
+                            'subject' => $eg->subject?->name ?? '—',
+                        ];
+                    }
+                }
+            }
+
+            if ($scheduledCount >= $needed) {
+                $conflictsRaw[] = 'Šiai grupei jau suplanuotos visos pamokos';
+            }
+            if ($subjectDayCounts[$day] >= $subjectPerDayLimit) {
+                $conflictsRaw[] = 'Viršytas pamokų skaičius tos pačios disciplinos tą dieną';
+            }
+            if ($teacherConflict) {
+                $conflictsRaw[] = "Mokytojas {$group->teacherLoginKey->full_name} tuo metu jau turi pamoką";
+            }
+            if ($roomConflict) {
+                $conflictsRaw[] = [
+                    'type' => 'room',
+                    'message' => 'Kabinetas užimtas',
+                    'details' => $roomConflictDetails,
+                ];
+            }
+            if (!empty($studentConflicts)) {
+                $conflictsRaw[] = [
+                    'type' => 'students',
+                    'message' => 'Mokiniai užimti',
+                    'students' => $studentConflicts,
+                ];
+            }
+
+            $status = 'free';
+            if ($teacherConflict) { $status = 'teacher_conflict'; }
+            elseif (!empty($studentConflicts) && $roomConflict) { $status = 'both_conflicts'; }
+            elseif (!empty($studentConflicts)) { $status = 'student_conflict'; }
+            elseif ($roomConflict) { $status = 'room_conflict'; }
+            elseif (!empty($conflictsRaw)) { $status = 'other_conflict'; }
+
+            $results[] = [
+                'day' => $day,
+                'slot' => $slot,
+                'status' => $status,
+                'hasConflicts' => $status !== 'free',
+                'conflicts' => $conflictsRaw,
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'items' => $results,
         ]);
     }
 

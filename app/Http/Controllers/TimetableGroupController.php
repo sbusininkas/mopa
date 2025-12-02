@@ -22,7 +22,7 @@ class TimetableGroupController extends Controller
         // Get scheduled and unscheduled counts for each group
         $groupsData = $groups->map(function($group) use ($timetable) {
             $scheduled = $timetable->slots()
-                ->where('group_id', $group->id)
+                ->where('timetable_group_id', $group->id)
                 ->count();
             $unscheduled = max(0, ($group->lessons_per_week ?? 0) - $scheduled);
             

@@ -31,7 +31,7 @@
                             <tbody>
                                 @for($row=1; $row <= $maxRows; $row++)
                                     <tr>
-                                        <td class="text-center fw-bold">{{ $row }}</td>
+                                        <td class="text-center fw-bold sticky-col-row">{{ $row }}</td>
                                         @foreach($days as $code => $label)
                                             @php 
                                                 $cell = $grid[$row][$code] ?? null;
@@ -66,12 +66,6 @@
                                                         data-group-name="{{ $cell['group'] }}"
                                                         data-subject-name="{{ $cell['subject'] ?? '' }}"
                                                     >{{ $cell['group'] }}</span>
-                                                    <div class="mt-1 small">
-                                                        <span class="badge bg-success">{{ $cell['subject'] ?? '—' }}</span>
-                                                        @if($cell['room'])
-                                                            <span class="badge bg-dark">{{ $cell['room'] }}</span>
-                                                        @endif
-                                                    </div>
                                                 @else
                                                     <span class="text-muted">—</span>
                                                 @endif
@@ -90,7 +84,7 @@
                 <div class="card-header p-2"><strong>Nesuplanuotos (šiam mokytojui)</strong></div>
                 <div class="card-body p-2" style="max-height:60vh; overflow:auto;">
                     @forelse(($unscheduled ?? []) as $u)
-                        <div class="unscheduled-item mb-1" draggable="true"
+                        <div class="unscheduled-item mb-1 d-flex align-items-center" draggable="true"
                              data-kind="unscheduled"
                              data-group-id="{{ $u['group_id'] }}"
                              data-group-name="{{ $u['group_name'] ?? $u['group'] ?? '' }}"
@@ -99,9 +93,13 @@
                              data-teacher-name="{{ $u['teacher_name'] ?? $u['teacher'] ?? '' }}"
                              data-remaining="{{ $u['remaining_lessons'] }}">
                             <div class="flex-grow-1">
-                                <span class="badge bg-secondary me-1">{{ $u['group_name'] ?? $u['group'] ?? 'Grupė' }}</span>
-                                <span class="badge bg-success">{{ $u['subject_name'] ?? $u['subject'] ?? '' }}</span>
-                                <small class="text-muted ms-1">({{ $u['remaining_lessons'] }} liko)</small>
+                                <div class="unscheduled-title">
+                                    {{ $u['group_name'] ?? $u['group'] ?? 'Grupė' }}
+                                    <span class="badge bg-primary ms-2 remaining-badge">{{ $u['remaining_lessons'] }}</span>
+                                </div>
+                                <div class="unscheduled-meta">
+                                    <span class="unscheduled-subject">{{ $u['subject_name'] ?? $u['subject'] ?? '' }}</span>
+                                </div>
                             </div>
                             <div class="ms-2">
                                 <button type="button" class="btn btn-outline-info btn-sm" 
@@ -115,7 +113,10 @@
                         <span class="text-muted small">Nėra neužpildytų pamokų šiam mokytojui</span>
                     @endforelse
                 </div>
-                <div class="card-footer p-1 small text-muted">Tempkite ant pasirinktų langelių</div>
+                <div class="card-footer d-flex justify-content-between align-items-center p-1 small text-muted">
+                    <span>Tempkite ant pasirinktų langelių</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAvailabilityMarks()" title="Išvalyti žymėjimus">Išvalyti</button>
+                </div>
             </div>
         </div>
     </div>
@@ -276,20 +277,14 @@ document.addEventListener('DOMContentLoaded', function(){
                                     dayNames[origDay] ?? origDay,
                                     origSlot
                                 );
-                                const swappedBadgeHtml = `<span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" draggable="true"
-                                        data-tooltip-b64="${tooltipB64}"
-                                        data-kind="scheduled"
-                                        data-slot-id="${swapData.swappedHtml.slot_id}"
-                                        data-group-id="${swapData.swappedHtml.group_id ?? ''}"
-                                        data-teacher-id="${teacherId}"
-                                        data-group-name="${swapData.swappedHtml.group}"
-                                        data-subject-name="${swapData.swappedHtml.subject ?? ''}">
-                                    ${swapData.swappedHtml.group}
-                                </span>
-                                <div class="mt-1 small">
-                                    <span class="badge bg-success">${swapData.swappedHtml.subject ?? '—'}</span>
-                                    ${swapData.swappedHtml.room ? `<span class="badge bg-dark">${swapData.swappedHtml.room}</span>` : ''}
-                                </div>`;
+                                const swappedBadgeHtml = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" draggable=\"true\"
+                                        data-tooltip-b64=\"${tooltipB64}\"
+                                        data-kind=\"scheduled\"
+                                        data-slot-id=\"${swapData.swappedHtml.slot_id}\"
+                                        data-group-id=\"${swapData.swappedHtml.group_id ?? ''}\"
+                                        data-teacher-id=\"${teacherId}\"
+                                        data-group-name=\"${swapData.swappedHtml.group}\"
+                                        data-subject-name=\"${swapData.swappedHtml.subject ?? ''}\">${swapData.swappedHtml.group}</span>`;
                                 originalCell.innerHTML = swappedBadgeHtml;
                                 const badge = originalCell.querySelector('.tt-trigger');
                                 initBadgeDrag(badge);
@@ -307,20 +302,14 @@ document.addEventListener('DOMContentLoaded', function(){
                             dayNames[day] ?? day,
                             slot
                         );
-                        const badgeHtml = `<span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" draggable="true"
-                                data-tooltip-b64="${tooltipB64}"
-                                data-kind="scheduled"
-                                data-slot-id="${swapData.html.slot_id ?? ''}"
-                                data-group-id="${groupId}"
-                                data-teacher-id="${teacherId}"
-                                data-group-name="${swapData.html.group}"
-                                data-subject-name="${swapData.html.subject ?? ''}">
-                            ${swapData.html.group}
-                        </span>
-                        <div class="mt-1 small">
-                            <span class="badge bg-success">${swapData.html.subject ?? '—'}</span>
-                            ${swapData.html.room ? `<span class="badge bg-dark">${swapData.html.room}</span>` : ''}
-                        </div>`;
+                        const badgeHtml = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" draggable=\"true\"
+                                data-tooltip-b64=\"${tooltipB64}\"
+                                data-kind=\"scheduled\"
+                                data-slot-id=\"${swapData.html.slot_id ?? ''}\"
+                                data-group-id=\"${groupId}\"
+                                data-teacher-id=\"${teacherId}\"
+                                data-group-name=\"${swapData.html.group}\"
+                                data-subject-name=\"${swapData.html.subject ?? ''}\">${swapData.html.group}</span>`;
                         cell.innerHTML = badgeHtml;
                         const targetBadge = cell.querySelector('.tt-trigger');
                         initBadgeDrag(targetBadge);
@@ -345,20 +334,14 @@ document.addEventListener('DOMContentLoaded', function(){
                         dayNames[day] ?? day,
                         slot
                     );
-                    const badgeHtml = `<span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" draggable="true"
-                            data-tooltip-b64="${tooltipB64}"
-                            data-kind="scheduled"
-                            data-slot-id="${data.html.slot_id ?? ''}"
-                            data-group-id="${groupId}"
-                            data-teacher-id="${teacherId}"
-                            data-group-name="${data.html.group}"
-                            data-subject-name="${data.html.subject ?? ''}">
-                        ${data.html.group}
-                    </span>
-                    <div class="mt-1 small">
-                        <span class="badge bg-success">${data.html.subject ?? '—'}</span>
-                        ${data.html.room ? `<span class="badge bg-dark">${data.html.room}</span>` : ''}
-                    </div>`;
+                    const badgeHtml = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" draggable=\"true\"
+                            data-tooltip-b64=\"${tooltipB64}\"
+                            data-kind=\"scheduled\"
+                            data-slot-id=\"${data.html.slot_id ?? ''}\"
+                            data-group-id=\"${groupId}\"
+                            data-teacher-id=\"${teacherId}\"
+                            data-group-name=\"${data.html.group}\"
+                            data-subject-name=\"${data.html.subject ?? ''}\">${data.html.group}</span>`;
                     cell.innerHTML = badgeHtml;
                     const badge = cell.querySelector('.tt-trigger');
                     initBadgeDrag(badge);
@@ -369,6 +352,7 @@ document.addEventListener('DOMContentLoaded', function(){
                 }
             } else if (draggedKind === 'unscheduled') {
                 const groupId = dragged.dataset.groupId;
+                let scheduled = false;
                 try {
                     const conflicts = await checkConflicts(groupId, teacherId, day, slot);
                     const confirmed = await showConfirmDialog(groupId, groupName, subjectName, day, slot, conflicts);
@@ -397,29 +381,34 @@ document.addEventListener('DOMContentLoaded', function(){
                         dayNames[day] ?? day,
                         slot
                     );
-                    const badgeHtml = `<span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" draggable="true"
-                                            data-tooltip-b64="${tooltipB64}"
-                                            data-kind="scheduled"
-                                            data-slot-id="${data.html.slot_id}"
-                                            data-group-id="${groupId}"
-                                            data-teacher-id="${teacherId}"
-                                            data-group-name="${data.html.group}"
-                                            data-subject-name="${data.html.subject ?? ''}">
-                                        ${data.html.group}
-                                    </span>
-                                    <div class="mt-1 small">
-                                        <span class="badge bg-success">${data.html.subject ?? '—'}</span>
-                                        ${data.html.room ? `<span class="badge bg-dark">${data.html.room}</span>` : ''}
-                                    </div>`;
+                    const badgeHtml = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" draggable=\"true\"
+                                            data-tooltip-b64=\"${tooltipB64}\"
+                                            data-kind=\"scheduled\"
+                                            data-slot-id=\"${data.html.slot_id}\"
+                                            data-group-id=\"${groupId}\"
+                                            data-teacher-id=\"${teacherId}\"
+                                            data-group-name=\"${data.html.group}\"
+                                            data-subject-name=\"${data.html.subject ?? ''}\">${data.html.group}</span>`;
                     cell.innerHTML = badgeHtml;
+                    scheduled = true;
                     const badge = cell.querySelector('.tt-trigger');
-                    initBadgeDrag(badge);
-                    initTooltip(badge);
+                    try { initBadgeDrag(badge); initTooltip(badge); } catch(e) { /* ignore tooltip init errors */ }
                     const rem = parseInt(dragged.dataset.remaining,10)-1;
-                    if (rem <= 0) { dragged.remove(); } else { dragged.dataset.remaining = rem; const sm = dragged.querySelector('small'); if (sm) sm.textContent = `(${rem} liko)`; }
+                    if (rem <= 0) {
+                        dragged.remove();
+                    } else {
+                        dragged.dataset.remaining = rem;
+                        const countEl = dragged.querySelector('.remaining-badge');
+                        if (countEl) { countEl.textContent = rem; }
+                    }
                     flashMessage('Pamoka sėkmingai įtraukta', 'success');
                 } catch (err) {
-                    showErrorModal('Klaida', 'Klaida siunčiant užklausą');
+                    // Suppress error if scheduling succeeded
+                    if (!scheduled) {
+                        showErrorModal('Klaida', 'Nepavyko įtraukti pamokos');
+                    } else {
+                        console.warn('Non-critical error after scheduling:', err);
+                    }
                 }
             }
         });
@@ -632,6 +621,68 @@ function showErrorModal(title, message) {
     document.body.appendChild(modal);
     const bsModal = new bootstrap.Modal(modal);
     bsModal.show();
+    
+    // If room conflict modal rendered, wire availability check on select change
+    const roomSelect = modal.querySelector('#newRoomSelect');
+    if (roomSelect) {
+        // Create/ensure hint container
+        let hint = modal.querySelector('#roomSelectionHint');
+        if (!hint) {
+            hint = document.createElement('div');
+            hint.id = 'roomSelectionHint';
+            hint.className = 'alert alert-info mt-3 mb-0';
+            hint.innerHTML = '<i class="bi bi-info-circle"></i> Pasirinkite kabinetą, kad patikrintume jo prieinamumą';
+            const body = modal.querySelector('.modal-body');
+            if (body) body.appendChild(hint);
+        }
+        
+        roomSelect.addEventListener('change', async () => {
+            const selectedRoomId = roomSelect.value;
+            if (!selectedRoomId) {
+                hint.className = 'alert alert-info mt-3 mb-0';
+                hint.innerHTML = '<i class="bi bi-info-circle"></i> Pasirinkite kabinetą, kad patikrintume jo prieinamumą';
+                return;
+            }
+            hint.className = 'alert alert-info mt-3 mb-0';
+            hint.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Tikrinama kabineto prieinamumas...';
+            try {
+                const resp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        group_id: groupId, 
+                        teacher_id: teacherId, 
+                        day: day, 
+                        slot: slot,
+                        check_room_id: parseInt(selectedRoomId, 10)
+                    })
+                });
+                const data = await resp.json();
+                let hasRoomConflict = false;
+                if (data && Array.isArray(data.conflicts)) {
+                    hasRoomConflict = data.conflicts.some(c => {
+                        if (typeof c === 'object' && c !== null) return c.type === 'room';
+                        if (typeof c === 'string') return c.includes('Kabinetas') || c.includes('užimtas');
+                        return false;
+                    });
+                }
+                if (hasRoomConflict) {
+                    hint.className = 'alert alert-danger mt-3 mb-0';
+                    hint.innerHTML = '<i class="bi bi-x-circle"></i> Pasirinktas kabinetas užimtas. Pasirinkite kitą.';
+                } else {
+                    hint.className = 'alert alert-success mt-3 mb-0';
+                    hint.innerHTML = '<i class="bi bi-check-circle"></i> Pasirinktas kabinetas laisvas. Galite pridėti pamoką.';
+                }
+            } catch (e) {
+                hint.className = 'alert alert-secondary mt-3 mb-0';
+                hint.innerHTML = '<i class="bi bi-question-circle"></i> Nepavyko patikrinti. Bandykite dar kartą.';
+            }
+        });
+    }
     modal.addEventListener('hidden.bs.modal', () => modal.remove());
 }
 
@@ -880,7 +931,7 @@ async function unscheduleLesson(slotId, badgeElement) {
         // Remove badge from timetable
         const cell = badgeElement.closest('td');
         if (cell) {
-            cell.innerHTML = '';
+            cell.innerHTML = '<span class="text-muted">—</span>';
         }
         
         // Show success message
@@ -912,14 +963,12 @@ function updateUnscheduledList(groupId, remainingLessons, groupData) {
         if (existingItem) {
             // Update existing item
             existingItem.dataset.remaining = remainingLessons;
-            const remainingSpan = existingItem.querySelector('small.text-muted');
-            if (remainingSpan) {
-                remainingSpan.textContent = `(${remainingLessons} liko)`;
-            }
+            const countEl = existingItem.querySelector('.remaining-badge');
+            if (countEl) { countEl.textContent = remainingLessons; }
         } else {
-            // Create new item
+            // Create new item with new design (no badges)
             const newItem = document.createElement('div');
-            newItem.className = 'unscheduled-item mb-1';
+            newItem.className = 'unscheduled-item mb-1 d-flex align-items-center';
             newItem.draggable = true;
             newItem.dataset.kind = 'unscheduled';
             newItem.dataset.groupId = groupId;
@@ -931,9 +980,12 @@ function updateUnscheduledList(groupId, remainingLessons, groupData) {
             
             newItem.innerHTML = `
                 <div class="flex-grow-1">
-                    <span class="badge bg-secondary me-1">${groupData.group_name}</span>
-                    <span class="badge bg-success">${groupData.subject_name}</span>
-                    <small class="text-muted ms-1">(${remainingLessons} liko)</small>
+                    <div class="unscheduled-title">${groupData.group_name}
+                        <span class="badge bg-primary ms-2 remaining-badge">${remainingLessons}</span>
+                    </div>
+                    <div class="unscheduled-meta">
+                        <span class="unscheduled-subject">${groupData.subject_name}</span>
+                    </div>
                 </div>
                 <div class="ms-2">
                     <button type="button" class="btn btn-outline-info btn-sm" 
@@ -1001,137 +1053,119 @@ async function checkConflicts(groupId, teacherId, day, slot, tempRoomId = null) 
 }
 
 async function findAvailableSlots(groupId, groupName, subjectName, teacherId) {
-    console.log('findAvailableSlots called:', { groupId, groupName, subjectName, teacherId });
-    
-    if (!teacherId) {
-        showErrorModal('Klaida', 'Grupė neturi priskirto mokytojo');
-        return;
+    if (!teacherId) { showErrorModal('Klaida', 'Grupė neturi priskirto mokytojo'); return; }
+
+    // Highlight selected unscheduled group
+    document.querySelectorAll('.unscheduled-item').forEach(el=> el.classList.remove('active-group'));
+    const chosen = document.querySelector(`.unscheduled-item[data-group-id='${groupId}']`);
+    if (chosen) chosen.classList.add('active-group');
+
+    // Overlay
+    let overlay = document.getElementById('availabilityLoading');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'availabilityLoading';
+        overlay.style.position = 'fixed';
+        overlay.style.top = 0; overlay.style.left = 0; overlay.style.right = 0; overlay.style.bottom = 0;
+        overlay.style.background = 'rgba(255,255,255,0.85)';
+        overlay.style.zIndex = 2000;
+        overlay.innerHTML = '<div class="d-flex flex-column align-items-center justify-content-center h-100"><div class="spinner-border text-primary" role="status"></div><div class="mt-3 text-muted">Tikrinamas užimtumas...</div></div>';
+        document.body.appendChild(overlay);
     }
-    
-    // Get all available rooms
+
+    // Fetch rooms once
     const roomsResp = await fetch(`{{ route('schools.timetables.groups.edit-data', [$school, $timetable, ':groupId']) }}`.replace(':groupId', groupId));
     const roomsData = await roomsResp.json();
     const availableRooms = roomsData.rooms || [];
     const currentRoomId = roomsData.group?.room_id;
-    
-    // Clear previous highlights
+
+    // Clear previous badges/highlights
     document.querySelectorAll('.timetable-cell').forEach(cell => {
-        cell.classList.remove('bg-success-subtle', 'bg-warning-subtle', 'bg-danger-subtle', 'bg-info-subtle', 'checking-slot');
-        const badge = cell.querySelector('.availability-badge');
-        if (badge) badge.remove();
+        cell.classList.remove('bg-success-subtle','bg-warning-subtle','bg-danger-subtle','bg-info-subtle','checking-slot');
+        const oldBadge = cell.querySelector('.availability-badge'); if (oldBadge) oldBadge.remove();
     });
-    
-    // Find all empty cells in teacher's schedule
-    const days = ['Pirmadienis', 'Antradienis', 'Trečiadienis', 'Ketvirtadienis', 'Penktadienis'];
-    const maxSlot = 9;
-    
-    console.log('Starting to check time slots...');
-    
-    for (let slot = 1; slot <= maxSlot; slot++) {
-        for (let day of days) {
-            // Find the cell in the timetable
-            const cell = findCellByDayAndSlot(day, slot);
-            if (!cell) continue;
-            
-            // Skip cells that already have a lesson (check if there's a draggable badge inside)
-            const hasLesson = cell.querySelector('[draggable="true"]');
-            if (hasLesson) {
-                console.log(`Skipping ${day} slot ${slot} - already has lesson`);
-                continue;
-            }
-            
-            // Mark as checking (blue highlight)
-            cell.classList.add('bg-info-subtle', 'checking-slot');
-            cell.style.position = 'relative';
-            
-            // Check conflicts
-            const conflicts = await checkConflicts(groupId, teacherId, day, slot);
-            
-            // Remove checking highlight
-            cell.classList.remove('bg-info-subtle', 'checking-slot');
-            
-            if (!conflicts.hasConflicts) {
-                // Completely free slot - show green badge
-                const badge = document.createElement('div');
-                badge.className = 'availability-badge badge bg-success position-absolute top-0 end-0 m-1';
-                badge.style.cursor = 'pointer';
-                badge.innerHTML = '<i class="bi bi-check-circle"></i> Laisvas';
-                badge.onclick = () => showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'free', [], availableRooms, currentRoomId);
-                cell.appendChild(badge);
-            } else {
-                // Check conflict types
-                const roomConflicts = conflicts.conflicts.filter(c => 
-                    (typeof c === 'object' && c.type === 'room') ||
-                    (typeof c === 'string' && c.includes('užimtas'))
-                );
-                
-                const studentConflicts = conflicts.conflicts.filter(c => 
-                    (typeof c === 'object' && c.type === 'students') ||
-                    (typeof c === 'string' && c.includes('mokiniai'))
-                );
-                
-                const teacherConflicts = conflicts.conflicts.filter(c => 
-                    (typeof c === 'string' && c.includes('Mokytojas')) ||
-                    (typeof c === 'string' && c.includes('mokytojas')) ||
-                    (typeof c === 'string' && c.includes('turi pamoką'))
-                );
-                
-                // Count total students in conflicts
-                let totalStudents = 0;
-                studentConflicts.forEach(c => {
-                    if (typeof c === 'object' && c.students && Array.isArray(c.students)) {
-                        totalStudents += c.students.length;
-                    }
-                });
-                
-                // If teacher is busy, don't allow adding - show blocking badge
-                if (teacherConflicts.length > 0) {
-                    const badge = document.createElement('div');
-                    badge.className = 'availability-badge badge bg-secondary position-absolute top-0 end-0 m-1';
-                    badge.style.cursor = 'pointer';
-                    badge.innerHTML = '<i class="bi bi-person-x"></i> Užimtas';
-                    badge.title = 'Mokytojas tuo metu jau turi pamoką';
-                    badge.onclick = () => showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'teacher_conflict', conflicts.conflicts, availableRooms, currentRoomId);
-                    cell.appendChild(badge);
-                    continue; // Skip to next slot
-                }
-                
-                // Show badge based on conflict type - prioritize students, but show both if needed
-                if (studentConflicts.length > 0 && roomConflicts.length > 0) {
-                    // Both conflicts - show red badge with both icons and student count
-                    const badge = document.createElement('div');
-                    badge.className = 'availability-badge badge bg-danger position-absolute top-0 end-0 m-1';
-                    badge.style.cursor = 'pointer';
-                    badge.innerHTML = `<i class="bi bi-people"></i> ${totalStudents} <i class="bi bi-door-closed"></i>`;
-                    badge.title = `Užimti ${totalStudents} mokiniai ir kabinetas`;
-                    badge.onclick = () => showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'both_conflicts', conflicts.conflicts, availableRooms, currentRoomId);
-                    cell.appendChild(badge);
-                } else if (studentConflicts.length > 0) {
-                    // Only student conflicts - show red badge with student count
-                    const badge = document.createElement('div');
-                    badge.className = 'availability-badge badge bg-danger position-absolute top-0 end-0 m-1';
-                    badge.style.cursor = 'pointer';
-                    badge.innerHTML = `<i class="bi bi-people"></i> ${totalStudents}`;
-                    badge.title = `Užimti ${totalStudents} mokiniai`;
-                    badge.onclick = () => showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'student_conflict', conflicts.conflicts, availableRooms, currentRoomId);
-                    cell.appendChild(badge);
-                } else if (roomConflicts.length > 0) {
-                    // Only room conflict - show yellow badge
-                    const badge = document.createElement('div');
-                    badge.className = 'availability-badge badge bg-warning position-absolute top-0 end-0 m-1';
-                    badge.style.cursor = 'pointer';
-                    badge.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Kabinetas';
-                    badge.onclick = () => showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'room_conflict', conflicts.conflicts, availableRooms, currentRoomId);
-                    cell.appendChild(badge);
-                }
-            }
-            
-            // Small delay to show visual feedback
-            await new Promise(resolve => setTimeout(resolve, 50));
-        }
+
+    // Collect empty cells for this teacher
+    const teacherCells = Array.from(document.querySelectorAll(`#teacherGrid td[data-teacher-id='${teacherId}']`));
+    const items = [];
+    teacherCells.forEach(cell => {
+        const hasLesson = cell.querySelector('[draggable="true"]');
+        if (hasLesson) return;
+        const dayCode = cell.dataset.day; const slot = parseInt(cell.dataset.slot,10);
+        if (!dayCode || !slot) return;
+        items.push({ day: dayCode, slot });
+        cell.classList.add('bg-info-subtle');
+    });
+
+    if (items.length === 0) { overlay.remove(); flashMessage('Nėra laisvų langelių tikrinimui', 'info'); return; }
+
+    // Bulk request
+    let resp; let data;
+    try {
+        resp = await fetch(`{{ route('schools.timetables.bulk-conflicts', [$school, $timetable]) }}`, {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json','X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]').getAttribute('content'),'Accept':'application/json' },
+            body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, items })
+        });
+        data = await resp.json();
+    } catch (e) {
+        overlay.remove(); showErrorModal('Klaida','Nepavyko atlikti masinio tikrinimo'); return;
     }
-    
-    console.log('Finished checking all slots');
+
+    overlay.remove();
+    if (!resp.ok || !data.success) { showErrorModal('Klaida', data.error || 'Nepavyko gauti rezultatų'); return; }
+
+    const resultsMap = {};
+    data.items.forEach(r => { resultsMap[r.day+'|'+r.slot] = r; });
+
+    teacherCells.forEach(cell => {
+        const hasLesson = cell.querySelector('[draggable="true"]'); if (hasLesson) return;
+        const dayCode = cell.dataset.day; const slot = parseInt(cell.dataset.slot,10);
+        const key = dayCode+'|'+slot; const r = resultsMap[key];
+        cell.classList.remove('bg-info-subtle');
+        if (!r) return;
+        let badge;
+        if (!r.hasConflicts) {
+            badge = document.createElement('div');
+            badge.className='availability-badge badge bg-success position-absolute top-0 end-0 m-1';
+            badge.style.cursor='pointer';
+            badge.innerHTML='<i class="bi bi-check-circle"></i> Laisvas';
+            badge.onclick=()=>showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, dayCode, slot, 'free', [], availableRooms, currentRoomId);
+        } else {
+            const conf = r.conflicts || [];
+            const student = conf.find(c=>typeof c==='object' && c.type==='students');
+            const room = conf.find(c=>typeof c==='object' && c.type==='room');
+            const teacherBusy = conf.find(c=>typeof c==='string' && (c.includes('turi pamoką') || c.includes('Mokytojas')));
+            const studentCount = student && Array.isArray(student.students) ? student.students.length : 0;
+            badge = document.createElement('div');
+            let status = r.status;
+            if (teacherBusy) {
+                badge.className='availability-badge badge bg-secondary position-absolute top-0 end-0 m-1';
+                badge.innerHTML='<i class="bi bi-person-x"></i>';
+                badge.title='Mokytojas užimtas';
+            } else if (student && room) {
+                badge.className='availability-badge badge bg-danger position-absolute top-0 end-0 m-1';
+                badge.innerHTML='<i class="bi bi-people"></i> '+studentCount+' <i class="bi bi-door-closed"></i>';
+                badge.title='Mokiniai ir kabinetas konfliktuoja';
+            } else if (student) {
+                badge.className='availability-badge badge bg-danger position-absolute top-0 end-0 m-1';
+                badge.innerHTML='<i class="bi bi-people"></i> '+studentCount;
+                badge.title='Mokinių konfliktas';
+            } else if (room) {
+                badge.className='availability-badge badge bg-warning position-absolute top-0 end-0 m-1';
+                badge.innerHTML='<i class="bi bi-door-closed"></i>';
+                badge.title='Kabinetas užimtas';
+            } else {
+                badge.className='availability-badge badge bg-warning position-absolute top-0 end-0 m-1';
+                badge.innerHTML='<i class="bi bi-exclamation-triangle"></i>';
+                badge.title='Kitas konfliktas';
+            }
+            badge.style.cursor='pointer';
+            badge.onclick=()=>showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, dayCode, slot, status, conf, availableRooms, currentRoomId);
+        }
+        cell.style.position='relative';
+        cell.appendChild(badge);
+    });
 }
 
 function findCellByDayAndSlot(day, slot) {
@@ -1649,6 +1683,15 @@ function flashMessage(msg,type){
     const el=document.createElement('div'); el.className=`alert alert-${type} py-1 px-2 mb-2`; el.textContent=msg; box.appendChild(el); setTimeout(()=>{ el.remove(); if(!box.children.length) box.remove(); },3000);
 }
 
+function clearAvailabilityMarks(){
+    // Remove availability badges and cell highlight classes
+    document.querySelectorAll('.availability-badge').forEach(b=>b.remove());
+    document.querySelectorAll('.timetable-cell').forEach(cell=>{
+        cell.classList.remove('bg-success-subtle','bg-warning-subtle','bg-danger-subtle','bg-info-subtle','checking-slot');
+    });
+    document.querySelectorAll('.unscheduled-item.active-group').forEach(el=> el.classList.remove('active-group'));
+}
+
 async function openEditGroupModal(groupId, buttonElement) {
     if (!groupId) return;
     
@@ -1852,6 +1895,11 @@ if (window.bootstrap) {
 .unscheduled-item { cursor: move; padding: 0.25rem 0.5rem; border-radius: 4px; transition: background-color 0.2s; }
 .unscheduled-item:hover { background-color: #f8f9fa; }
 .unscheduled-item.dragging { opacity: 0.5; }
+.unscheduled-item.active-group { background-color:#e7f1ff; outline:2px solid #0d6efd; }
+.unscheduled-title { font-weight: 600; color: #212529; }
+.unscheduled-meta { font-size: 0.85rem; color: #6c757d; display: flex; gap: 8px; align-items: baseline; }
+.unscheduled-subject { color: #198754; font-weight: 500; }
+.unscheduled-teacher { color: #212529; background: #212529; border-radius: 4px; padding: 2px 6px; color: #fff; font-size: 0.75rem; }
 
 /* Slot checking animation */
 .checking-slot {
@@ -1894,6 +1942,15 @@ if (window.bootstrap) {
 .tt-divider {
     border-top: 1px solid rgba(255,255,255,0.2);
     margin: 0.25rem 0;
+}
+</style>
+<style>
+/* Sticky first column (lesson number) in individual teacher view */
+.sticky-col-row {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background: #fff;
 }
 </style>
 @endpush
