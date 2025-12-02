@@ -674,6 +674,19 @@ document.addEventListener('DOMContentLoaded', function(){
                     div.dataset.kind='unscheduled'; div.dataset.groupId=groupId; div.dataset.teacherId=teacherId; div.dataset.remaining='1';
                     div.innerHTML = `<div class=\"flex-grow-1\"><span class=\"badge bg-secondary me-1\">${data.group?.name || 'Grupė'}</span><span class=\"badge bg-success\">${data.group?.subject_name || '—'}</span><small class=\"text-muted ms-1\">(1 liko)</small></div><div class=\"ms-2 btn-group btn-group-sm\"><button type=\"button\" class=\"btn btn-outline-info\" title=\"Tikrinti\" onclick=\"previewConflictsForGroupTeachersView(${teacherId}, ${groupId})\"><i class=\"bi bi-search\"></i></button><button type=\"button\" class=\"btn btn-outline-secondary\" title=\"Išvalyti\" onclick=\"clearConflictPreviewsTeachersView()\"><i class=\"bi bi-x-lg\"></i></button></div>`;
                     body.prepend(div);
+                    // Make newly created item draggable
+                    div.addEventListener('dragstart', e => {
+                        dragged = div;
+                        draggedKind = 'unscheduled';
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', div.dataset.groupId);
+                        div.classList.add('dragging');
+                    });
+                    div.addEventListener('dragend', () => {
+                        dragged?.classList.remove('dragging');
+                        dragged = null;
+                        draggedKind = null;
+                    });
                 }
             }
             flashMessage('Pamoka iškelta į nesuplanuotas', 'warning');
