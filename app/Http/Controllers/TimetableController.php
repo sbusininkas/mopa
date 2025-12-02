@@ -258,6 +258,66 @@ class TimetableController extends Controller
         return response()->json(['data' => $unscheduled]);
     }
 
+    public function unscheduleSlot(Request $request, School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        $validated = $request->validate([
+            'slot_id' => 'required|integer',
+        ]);
+        $slot = $timetable->slots()->with('group.subject','group.teacherLoginKey')->find($validated['slot_id']);
+        if (!$slot) { return response()->json(['error' => 'Pamoka nerasta'], 404); }
+        $group = $slot->group;
+        if (!$group) { return response()->json(['error' => 'Grupė nerasta'], 404); }
+
+        // Delete slot
+        $slot->delete();
+
+        // Update generation_report (increment remaining for this group)
+        $report = $timetable->generation_report ?? [];
+        $found = false;
+        if (!isset($report['unscheduled'])) { $report['unscheduled'] = []; }
+        foreach ($report['unscheduled'] as &$u) {
+            if (($u['group_id'] ?? null) == $group->id) {
+                $u['remaining_lessons'] = (int)($u['remaining_lessons'] ?? 0) + 1;
+                $found = true;
+                break;
+            }
+        }
+        unset($u);
+        if (!$found) {
+            $report['unscheduled'][] = [
+                'group_id' => $group->id,
+                'group_name' => $group->name,
+                'subject_id' => $group->subject_id,
+                'subject_name' => $group->subject?->name,
+                'teacher_login_key_id' => $group->teacher_login_key_id,
+                'teacher_name' => $group->teacherLoginKey?->full_name,
+                'remaining_lessons' => 1,
+                'requested_lessons' => max(1, (int)($group->lessons_per_week ?? 1)),
+            ];
+        }
+        // Recalculate counts
+        $report['unscheduled_units'] = 0;
+        $filtered = [];
+        foreach ($report['unscheduled'] as $entry) {
+            $report['unscheduled_units'] += (int)($entry['remaining_lessons'] ?? 0);
+            if (($entry['remaining_lessons'] ?? 0) > 0) { $filtered[] = $entry; }
+        }
+        $report['unscheduled'] = $filtered;
+        $report['unscheduled_count'] = count($filtered);
+        $timetable->update(['generation_report' => $report]);
+
+        return response()->json([
+            'success' => true,
+            'group' => [
+                'id' => $group->id,
+                'name' => $group->name,
+                'subject_name' => $group->subject?->name,
+                'teacher_id' => $group->teacher_login_key_id,
+            ],
+        ]);
+    }
+
     public function storeManualSlot(Request $request, School $school, Timetable $timetable)
     {
         abort_unless($timetable->school_id === $school->id, 404);

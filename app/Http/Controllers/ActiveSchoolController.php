@@ -43,7 +43,8 @@ class ActiveSchoolController extends Controller
     {
         $school = $this->getSchool($request);
         $classes = $school->classes()->orderBy('name')->get();
-        return view('admin.classes.index', compact('school', 'classes'));
+        $teachers = $school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->orderBy('first_name')->get();
+        return view('admin.classes.index', compact('school', 'classes', 'teachers'));
     }
 
     /**

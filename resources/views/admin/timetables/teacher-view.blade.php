@@ -49,6 +49,7 @@
                                                         data-lesson-nr="{{ $row }}"
                                                         onclick="showLessonDetails(this, event)"
                                                     >{{ $cell['group'] }}</span>
+                                                    <button type="button" class="btn btn-outline-danger btn-sm ms-1 py-0 px-1" title="Iškelti į nesuplanuotas" onclick="unscheduleSlotTeacherView({{ $cell['slot_id'] }}, {{ $cell['group_id'] }}, {{ $teacher->id }}, this)"><i class="bi bi-box-arrow-down"></i></button>
                                                     <div class="mt-1 small">
                                                         <span class="badge bg-success">{{ $cell['subject'] ?? '—' }}</span>
                                                         @if($cell['room'])
@@ -73,7 +74,7 @@
                 <div class="card-header p-2"><strong>Nesuplanuotos (šiam mokytojui)</strong></div>
                 <div class="card-body p-2" style="max-height:60vh; overflow:auto;">
                     @forelse(($unscheduled ?? []) as $u)
-                        <div class="unscheduled-item mb-1" draggable="true"
+                        <div class="unscheduled-item mb-1 d-flex align-items-center justify-content-between" draggable="true"
                              data-kind="unscheduled"
                              data-group-id="{{ $u['group_id'] }}"
                              data-group-name="{{ $u['group_name'] }}"
@@ -81,9 +82,21 @@
                              data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
                              data-teacher-name="{{ $u['teacher_name'] ?? '' }}"
                              data-remaining="{{ $u['remaining_lessons'] }}">
-                            <span class="badge bg-secondary me-1">{{ $u['group_name'] }}</span>
-                            <span class="badge bg-success">{{ $u['subject_name'] }}</span>
-                            <small class="text-muted ms-1">({{ $u['remaining_lessons'] }} liko)</small>
+                            <div class="flex-grow-1">
+                                <span class="badge bg-secondary me-1">{{ $u['group_name'] }}</span>
+                                <span class="badge bg-success">{{ $u['subject_name'] }}</span>
+                                <small class="text-muted ms-1">({{ $u['remaining_lessons'] }} liko)</small>
+                            </div>
+                            <div class="ms-2 btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-info" title="Tikrinti galimus konfliktus"
+                                    onclick="previewConflictsForGroup({{ $teacher->id }}, {{ $u['group_id'] }})">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" title="Išvalyti peržiūrą"
+                                    onclick="clearConflictPreviews()">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
                         </div>
                     @empty
                         <span class="text-muted small">Nėra neužpildytų pamokų šiam mokytojui</span>
@@ -385,6 +398,113 @@ document.addEventListener('DOMContentLoaded', function(){
         });
     });
 
+    // Conflict preview helpers
+    window.clearConflictPreviews = function(){
+        grid.querySelectorAll('.conflict-preview').forEach(el => el.remove());
+        grid.querySelectorAll('.drop-target').forEach(c => c.classList.remove('preview-ok','preview-bad'));
+    }
+
+    window.previewConflictsForGroup = async function(teacherId, groupId){
+        clearConflictPreviews();
+        const cells = Array.from(grid.querySelectorAll('.drop-target'))
+            .filter(c => String(c.dataset.teacherId || '') === String(teacherId));
+
+        for(const cell of cells){
+            // Skip cells already occupied
+            if (cell.querySelector('.tt-trigger')) continue;
+            const day = cell.dataset.day; const slot = cell.dataset.slot;
+            // Show loading badge while checking
+            const holder = document.createElement('div');
+            holder.className = 'conflict-preview mt-1';
+            holder.innerHTML = `<span class="badge bg-light text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Tikrinama</span>`;
+            cell.appendChild(holder);
+            try{
+                const data = await checkConflicts(groupId, teacherId, day, slot);
+                // Build badges
+                let html = '';
+                let title = '';
+                let studentCount = 0; let roomFlag = false; let otherCount = 0;
+                const list = Array.isArray(data.conflicts) ? data.conflicts : [];
+                list.forEach(c => {
+                    title += (title ? '\n' : '') + c;
+                    const lc = String(c).toLowerCase();
+                    if (lc.startsWith('užimti mokiniai:')){
+                        const tail = c.substring('Užimti mokiniai:'.length).trim();
+                        const arr = tail.split(',').map(s=>s.trim()).filter(Boolean);
+                        studentCount = arr.length;
+                    } else if (/kabin/i.test(lc)) {
+                        roomFlag = true;
+                    } else {
+                        otherCount++;
+                    }
+                });
+
+                if (data.hasConflicts){
+                    const parts = [];
+                    if (studentCount>0) parts.push(`<span class="badge bg-warning text-dark me-1" title="Užimti mokiniai: ${studentCount}"><i class="bi bi-people-fill"></i> ${studentCount}</span>`);
+                    if (roomFlag) parts.push(`<span class="badge bg-dark me-1" title="Kabinetas užimtas"><i class="bi bi-door-closed"></i></span>`);
+                    if (otherCount>0) parts.push(`<span class="badge bg-danger" title="Kiti konfliktai: ${otherCount}"><i class="bi bi-exclamation-triangle"></i> ${otherCount}</span>`);
+                    html = parts.join('');
+                    cell.classList.add('preview-bad');
+                } else {
+                    html = `<span class="badge bg-success" title="Konfliktų nėra"><i class="bi bi-check-lg"></i></span>`;
+                    cell.classList.add('preview-ok');
+                }
+                holder.innerHTML = html;
+                holder.title = title;
+            }catch(err){
+                holder.innerHTML = `<span class="badge bg-secondary"><i class="bi bi-question-circle"></i></span>`;
+            }
+        }
+    }
+
+    // Unschedule from teacher view
+    window.unscheduleSlotTeacherView = async function(slotId, groupId, teacherId, btn){
+        const cell = btn.closest('td');
+        btn.disabled = true;
+        try{
+            const resp = await fetch(`{{ route('schools.timetables.manual-slot', [$school, $timetable]) }}`.replace('manual-slot','unschedule-slot'), {
+                method: 'POST',
+                headers: { 'Content-Type':'application/json','X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'), 'Accept':'application/json' },
+                body: JSON.stringify({ slot_id: slotId })
+            });
+            const data = await resp.json();
+            if(!resp.ok || !data.success){ showErrorModal('Klaida', data.error || 'Nepavyko iškelti į nesuplanuotas'); btn.disabled=false; return; }
+            // Free the cell
+            cell.innerHTML = '<span class="text-muted">—</span>';
+            // Update unscheduled panel (increase remaining or create)
+            const panel = document.getElementById('unscheduledPanel');
+            if(panel){
+                const item = panel.querySelector(`.unscheduled-item[data-group-id="${groupId}"]`);
+                if(item){
+                    let rem = parseInt(item.dataset.remaining,10)||0; rem=rem+1; item.dataset.remaining=String(rem);
+                    const sm = item.querySelector('small'); if (sm) sm.textContent = `(${rem} liko)`;
+                } else {
+                    const body = panel.querySelector('.card-body');
+                    const div = document.createElement('div');
+                    div.className='unscheduled-item mb-1 d-flex align-items-center justify-content-between';
+                    div.setAttribute('draggable','true');
+                    div.dataset.kind='unscheduled'; div.dataset.groupId=groupId; div.dataset.teacherId=teacherId; div.dataset.remaining='1';
+                    div.innerHTML = `<div class="flex-grow-1"><span class="badge bg-secondary me-1">${data.group?.name || 'Grupė'}</span><span class="badge bg-success">${data.group?.subject_name || '—'}</span><small class="text-muted ms-1">(1 liko)</small></div><div class="ms-2 btn-group btn-group-sm"><button type="button" class="btn btn-outline-info" title="Tikrinti" onclick="previewConflictsForGroup(${teacherId}, ${groupId})"><i class="bi bi-search"></i></button><button type="button" class="btn btn-outline-secondary" title="Išvalyti" onclick="clearConflictPreviews()"><i class="bi bi-x-lg"></i></button></div>`;
+                    body.prepend(div);
+                    // Make newly created item draggable
+                    div.addEventListener('dragstart', e => {
+                        dragged = div;
+                        draggedKind = 'unscheduled';
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', div.dataset.groupId);
+                        div.classList.add('dragging');
+                    });
+                    div.addEventListener('dragend', () => {
+                        dragged?.classList.remove('dragging');
+                        dragged = null;
+                        draggedKind = null;
+                    });
+                }
+            }
+            flashMessage('Pamoka iškelta į nesuplanuotas', 'warning');
+        }catch(err){ showErrorModal('Klaida', 'Klaida siunčiant užklausą'); btn.disabled=false; }
+    }
     async function checkConflicts(groupId, teacherId, day, slot) {
         try {
             const resp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
@@ -791,5 +911,8 @@ function showLessonDetails(badge, event) {
 .unscheduled-item { cursor: move; padding: 0.25rem 0.5rem; border-radius: 4px; transition: background-color 0.2s; }
 .unscheduled-item:hover { background-color: #f8f9fa; }
 .unscheduled-item.dragging { opacity: 0.5; }
+.conflict-preview .badge { font-size: .7rem; }
+.drop-target.preview-ok { box-shadow: inset 0 0 0 2px #19875466; }
+.drop-target.preview-bad { box-shadow: inset 0 0 0 2px #dc354566; }
 </style>
 @endpush

@@ -1,6 +1,11 @@
 @extends('layouts.admin')
 
 @section('content')
+<style>
+.hover-bg-light:hover {
+    background-color: #f8f9fa !important;
+}
+</style>
 <div class="container">
     @if(session('success'))
         <div class="position-fixed top-0 end-0 p-3" style="z-index: 1080">
@@ -298,19 +303,44 @@
                             
                             <hr class="my-4">
                             
-                            <h6 class="mb-3"><i class="bi bi-people"></i> Mokinių sąrašas</h6>
+                            <h6 class="mb-3"><i class="bi bi-people"></i> Mokinių valdymas</h6>
                             <div class="row">
-                                <div class="col-md-12">
-                                    <div class="input-group mb-3">
-                                        <input type="text" class="form-control" id="studentSearchUnsch{{ $item['group_id'] }}" placeholder="Ieškoti mokinių...">
-                                        <button class="btn btn-outline-secondary" type="button" onclick="loadAllStudentsUnsch({{ $item['group_id'] }})">
-                                            <i class="bi bi-arrow-clockwise"></i> Įkelti visus
-                                        </button>
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header bg-light">
+                                            <strong><i class="bi bi-search"></i> Ieškoti mokinių</strong>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="input-group mb-3">
+                                                <input type="text" class="form-control" id="studentSearchUnsch{{ $item['group_id'] }}" placeholder="Ieškoti pagal vardą/pavardę...">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="loadAllStudentsUnsch({{ $item['group_id'] }})">
+                                                    <i class="bi bi-arrow-clockwise"></i>
+                                                </button>
+                                            </div>
+                                            <div id="studentsListUnsch{{ $item['group_id'] }}" style="max-height: 350px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.25rem; padding: 0.5rem;">
+                                                <div class="text-center py-3">
+                                                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                                                    <p class="text-muted small mt-2">Kraunami mokiniai...</p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div id="studentsListUnsch{{ $item['group_id'] }}" style="max-height: 300px; overflow-y: auto;">
-                                        <div class="text-center py-3">
-                                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                                            <p class="text-muted small mt-2">Kraunami mokiniai...</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header bg-success text-white">
+                                            <strong><i class="bi bi-people-fill"></i> Priskirti mokiniai (<span id="assignedCountUnsch{{ $item['group_id'] }}">0</span>)</strong>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="input-group input-group-sm mb-2">
+                                                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                                <input type="text" class="form-control" id="assignedSearchUnsch{{ $item['group_id'] }}" placeholder="Filtruoti priskirtus mokinius...">
+                                            </div>
+                                            <div id="assignedStudentsListUnsch{{ $item['group_id'] }}" style="max-height: 400px; overflow-y: auto;">
+                                                <div class="text-center py-3 text-muted">
+                                                    <small>Mokinių nėra</small>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -585,60 +615,60 @@
                                         <form method="POST" class="assign-form" action="{{ route('schools.timetables.groups.assign-students', [$school, $timetable, $group]) }}">
                                             @csrf
                                             <div class="row">
-                                        <div class="col-md-5">
-                                            <label class="form-label">Ieškoti mokinių</label>
-                                            <input type="text" class="form-control mb-2" id="globalSearch{{ $group->id }}" placeholder="Įveskite vardą ar pavardę...">
-                                            <div class="mt-2">
-                                                <label class="form-label text-muted small">arba pasirinkite klasę</label>
-                                                <select id="classSelect{{ $group->id }}" class="form-select">
-                                                    <option value="">-- Pasirinkite klasę --</option>
-                                                    @foreach($school->classes as $class)
-                                                        <option value="{{ $class->id }}">{{ $class->name }}</option>
-                                                    @endforeach
-                                                </select>
-                                            </div>
-                                            <div class="mt-2 d-flex align-items-center gap-2">
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="selectAll{{ $group->id }}">
-                                                    <label class="form-check-label" for="selectAll{{ $group->id }}">Pažymėti visus</label>
+                                                <div class="col-md-5">
+                                                    <label class="form-label">Ieškoti mokinių</label>
+                                                    <input type="text" class="form-control mb-2" id="globalSearch{{ $group->id }}" placeholder="Įveskite vardą ar pavardę...">
+                                                    <div class="mt-2">
+                                                        <label class="form-label text-muted small">arba pasirinkite klasę</label>
+                                                        <select id="classSelect{{ $group->id }}" class="form-select">
+                                                            <option value="">-- Pasirinkite klasę --</option>
+                                                            @foreach($school->classes as $class)
+                                                                <option value="{{ $class->id }}">{{ $class->name }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+                                                    <div class="mt-2 d-flex align-items-center gap-2">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" id="selectAll{{ $group->id }}">
+                                                            <label class="form-check-label" for="selectAll{{ $group->id }}">Pažymėti visus</label>
+                                                        </div>
+                                                        <input type="text" class="form-control form-control-sm" id="filterInput{{ $group->id }}" placeholder="Filtruoti rezultatus">
+                                                    </div>
+                                                    <div class="mt-3" id="studentsList{{ $group->id }}">
+                                                        <p class="text-muted small">Ieškokite mokinio arba pasirinkite klasę.</p>
+                                                    </div>
                                                 </div>
-                                                <input type="text" class="form-control form-control-sm" id="filterInput{{ $group->id }}" placeholder="Filtruoti rezultatus">
+                                                <div class="col-md-7">
+                                                    <div class="d-flex justify-content-end align-items-center mb-1">
+                                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="removeAll{{ $group->id }}"><i class="bi bi-x-circle"></i> Pašalinti visus</button>
+                                                    </div>
+                                                    <div class="modern-table-wrapper">
+                                                        <table class="modern-table table table-hover mb-0">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th style="width:40px"></th>
+                                                                    <th>Vardas</th>
+                                                                    <th>Klasė</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody id="assignedStudents{{ $group->id }}">
+                                                                @foreach($group->students as $student)
+                                                                    <tr>
+                                                                        <td>
+                                                                            <input type="checkbox" name="login_key_ids[]" value="{{ $student->id }}" checked>
+                                                                        </td>
+                                                                        <td>{{ $student->full_name }}</td>
+                                                                        <td>{{ $student->class?->name }}</td>
+                                                                    </tr>
+                                                                @endforeach
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <div class="text-end mt-2">
+                                                        <button class="btn btn-primary btn-sm assign-submit" type="submit" data-loading-text="<span class='spinner-border spinner-border-sm me-1'></span>Saugoma..."><i class="bi bi-save"></i> Išsaugoti priskyrimus</button>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div class="mt-3" id="studentsList{{ $group->id }}">
-                                                <p class="text-muted small">Ieškokite mokinio arba pasirinkite klasę.</p>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-7">
-                                            <div class="d-flex justify-content-end align-items-center mb-1">
-                                                <button type="button" class="btn btn-outline-secondary btn-sm" id="removeAll{{ $group->id }}"><i class="bi bi-x-circle"></i> Pašalinti visus</button>
-                                            </div>
-                                            <div class="modern-table-wrapper">
-                                                <table class="modern-table table table-hover mb-0">
-                                                    <thead>
-                                                        <tr>
-                                                            <th style="width:40px"></th>
-                                                            <th>Vardas</th>
-                                                            <th>Klasė</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody id="assignedStudents{{ $group->id }}">
-                                                        @foreach($group->students as $student)
-                                                            <tr>
-                                                                <td>
-                                                                    <input type="checkbox" name="login_key_ids[]" value="{{ $student->id }}" checked>
-                                                                </td>
-                                                                <td>{{ $student->full_name }}</td>
-                                                                <td>{{ $student->class?->name }}</td>
-                                                            </tr>
-                                                        @endforeach
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                            <div class="text-end mt-2">
-                                                <button class="btn btn-primary btn-sm assign-submit" type="submit" data-loading-text="<span class='spinner-border spinner-border-sm me-1'></span>Saugoma..."><i class="bi bi-save"></i> Išsaugoti priskyrimus</button>
-                                            </div>
-                                            </div>
-                                        </div>
                                         </form>
                                     </div>
                                 </div>
@@ -807,14 +837,27 @@ function copyUnscheduledGroup(groupId, unscheduledCount) {
 }
 
 // Functions for unscheduled group modals
+function getCurrentAssignedIds(groupId) {
+    const assignedList = document.getElementById('assignedStudentsListUnsch' + groupId);
+    if (!assignedList) return [];
+    // Only treat CHECKED checkboxes as currently assigned
+    const checks = assignedList.querySelectorAll('input.assigned-checkbox:checked');
+    return Array.from(checks)
+        .map(el => parseInt(el.value))
+        .filter(v => !isNaN(v));
+}
+
 function loadAllStudentsUnsch(groupId) {
     const studentsList = document.getElementById('studentsListUnsch' + groupId);
+    
+    // Get current assigned IDs from DOM
+    const currentAssignedIds = getCurrentAssignedIds(groupId);
     
     fetch(`{{ url('/admin/api/schools') }}/{{ $school->id }}/students`)
         .then(res => res.json())
         .then(json => {
             const items = json.data || [];
-            renderStudentsUnsch(groupId, items);
+            renderStudentsUnschWithAssigned(groupId, items, currentAssignedIds);
         })
         .catch(e => {
             studentsList.innerHTML = '<div class="alert alert-danger small">Klaida kraunant mokinius</div>';
@@ -822,60 +865,150 @@ function loadAllStudentsUnsch(groupId) {
 }
 
 function renderStudentsUnsch(groupId, students) {
-    renderStudentsUnschWithAssigned(groupId, students, []);
+    const currentAssignedIds = getCurrentAssignedIds(groupId);
+    renderStudentsUnschWithAssigned(groupId, students, currentAssignedIds);
 }
 
 function renderStudentsUnschWithAssigned(groupId, students, assignedIds) {
     const studentsList = document.getElementById('studentsListUnsch' + groupId);
+    const assignedList = document.getElementById('assignedStudentsListUnsch' + groupId);
+    const assignedCount = document.getElementById('assignedCountUnsch' + groupId);
     
     if (students.length === 0) {
-        studentsList.innerHTML = '<p class="text-muted small">Mokinių nerasta</p>';
+        studentsList.innerHTML = '<p class="text-muted small p-2">Mokinių nerasta</p>';
         return;
     }
     
     // Separate assigned and unassigned students
-    const assignedStudents = students.filter(s => assignedIds.includes(s.id));
-    const unassignedStudents = students.filter(s => !assignedIds.includes(s.id));
+    let assignedStudents = students.filter(s => assignedIds.includes(s.id));
+    let unassignedStudents = students.filter(s => !assignedIds.includes(s.id));
+
+    // Sort both lists by full_name (vardas pavardė)
+    const byName = (a, b) => (a.full_name || '').localeCompare(b.full_name || '', 'lt', { sensitivity: 'base' });
+    assignedStudents = assignedStudents.sort(byName);
+    unassignedStudents = unassignedStudents.sort(byName);
     
-    // Render assigned first, then unassigned
-    const sortedStudents = [...assignedStudents, ...unassignedStudents];
-    
-    let html = '<div class="list-group">';
-    
-    // Add header if there are assigned students
-    if (assignedStudents.length > 0) {
-        html += `
-            <div class="list-group-item bg-success text-white fw-bold small">
-                <i class="bi bi-people-fill"></i> Priskirti mokiniai (${assignedStudents.length})
-            </div>
-        `;
+    // Update counter
+    if (assignedCount) {
+        assignedCount.textContent = assignedStudents.length;
     }
     
-    sortedStudents.forEach(student => {
-        const isAssigned = assignedIds.includes(student.id);
-        
-        // Add separator between assigned and unassigned
-        if (isAssigned === false && sortedStudents.indexOf(student) === assignedStudents.length && unassignedStudents.length > 0) {
-            html += `
-                <div class="list-group-item bg-light text-muted fw-bold small">
-                    <i class="bi bi-person-plus"></i> Kiti mokiniai (${unassignedStudents.length})
+    // Render UNASSIGNED students (left panel - search results)
+    let searchHtml = '';
+    if (unassignedStudents.length === 0) {
+        searchHtml = '<p class="text-muted small p-2">Visi mokiniai jau priskirti</p>';
+    } else {
+        unassignedStudents.forEach(student => {
+            searchHtml += `
+                <div class="d-flex align-items-center justify-content-between p-2 border-bottom hover-bg-light" style="cursor: pointer;">
+                    <div class="flex-grow-1">
+                        <div class="small">${student.full_name}</div>
+                        <small class="text-muted">${student.class_name || ''}</small>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-success" onclick="assignStudentUnsch(${groupId}, ${student.id}, '${student.full_name}', '${student.class_name || ''}')">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
                 </div>
             `;
-        }
-        
-        html += `
-            <label class="list-group-item d-flex align-items-center ${isAssigned ? 'border-success border-start border-3' : ''}">
-                <input type="checkbox" class="form-check-input me-2" name="students[]" value="${student.id}" ${isAssigned ? 'checked' : ''}>
-                <div class="flex-grow-1">
-                    <div>${student.full_name} ${isAssigned ? '<i class="bi bi-check-circle-fill text-success ms-1"></i>' : ''}</div>
-                    <small class="text-muted">${student.class_name || ''}</small>
-                </div>
-            </label>
-        `;
-    });
-    html += '</div>';
+        });
+    }
+    studentsList.innerHTML = searchHtml;
     
-    studentsList.innerHTML = html;
+    // Render ASSIGNED students (right panel)
+    let assignedHtml = '';
+    if (assignedStudents.length === 0) {
+        assignedHtml = '<div class="text-center py-3 text-muted"><small>Mokinių nėra</small></div>';
+    } else {
+        assignedStudents.forEach(student => {
+            const inputId = `assignedCheck${groupId}_${student.id}`;
+            assignedHtml += `
+                <div class="d-flex align-items-center justify-content-between p-2 border-bottom" data-student-id="${student.id}">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input assigned-checkbox" type="checkbox" value="${student.id}" id="${inputId}" checked>
+                        <label class="form-check-label" for="${inputId}">
+                            <span class="small fw-bold">${student.full_name}</span>
+                            <small class="text-muted ms-1">${student.class_name || ''}</small>
+                        </label>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    assignedList.innerHTML = assignedHtml;
+}
+
+// Assign student to group
+window.assignStudentUnsch = function(groupId, studentId, studentName, className) {
+    const assignedList = document.getElementById('assignedStudentsListUnsch' + groupId);
+    const assignedCount = document.getElementById('assignedCountUnsch' + groupId);
+    
+    // Check if already exists
+    if (assignedList.querySelector(`[data-student-id="${studentId}"]`)) {
+        // If exists but checkbox is unchecked, check it
+        const existingCheckbox = assignedList.querySelector(`[data-student-id="${studentId}"] input.assigned-checkbox`);
+        if (existingCheckbox && !existingCheckbox.checked) {
+            existingCheckbox.checked = true;
+        }
+        return;
+    }
+    
+    // Remove "no students" message if exists
+    const emptyMsg = assignedList.querySelector('.text-center');
+    if (emptyMsg) emptyMsg.remove();
+    
+    // Add to assigned list
+    const newItem = document.createElement('div');
+    newItem.className = 'd-flex align-items-center justify-content-between p-2 border-bottom';
+    newItem.setAttribute('data-student-id', studentId);
+    const inputId = `assignedCheck${groupId}_${studentId}`;
+    newItem.innerHTML = `
+        <div class="form-check mb-0">
+            <input class="form-check-input assigned-checkbox" type="checkbox" value="${studentId}" id="${inputId}" checked>
+            <label class="form-check-label" for="${inputId}">
+                <span class="small fw-bold">${studentName}</span>
+                <small class="text-muted ms-1">${className || ''}</small>
+            </label>
+        </div>
+    `;
+    assignedList.appendChild(newItem);
+    
+    // Update counter
+    const currentCount = parseInt(assignedCount.textContent || '0');
+    assignedCount.textContent = currentCount + 1;
+    
+    // Remove from search list
+    const searchInput = document.getElementById('studentSearchUnsch' + groupId);
+    if (searchInput && searchInput.value.trim()) {
+        // Re-trigger search to update list
+        searchInput.dispatchEvent(new Event('input'));
+    } else {
+        // Reload all students
+        loadAllStudentsUnsch(groupId);
+    }
+}
+
+// Unassign student from group
+window.unassignStudentUnsch = function(groupId, studentId) {
+    const assignedList = document.getElementById('assignedStudentsListUnsch' + groupId);
+    const assignedCount = document.getElementById('assignedCountUnsch' + groupId);
+    
+    // Toggle to unchecked instead of removing (checkbox principle)
+    const checkbox = assignedList.querySelector(`[data-student-id="${studentId}"] input.assigned-checkbox`);
+    if (checkbox) checkbox.checked = false;
+    
+    // Update counter based on checked boxes
+    const newCount = assignedList.querySelectorAll('input.assigned-checkbox:checked').length;
+    assignedCount.textContent = newCount;
+    
+    // Do not remove item; saving will apply changes
+    
+    // Reload search list to show this student again
+    const searchInput = document.getElementById('studentSearchUnsch' + groupId);
+    if (searchInput && searchInput.value.trim()) {
+        searchInput.dispatchEvent(new Event('input'));
+    } else {
+        loadAllStudentsUnsch(groupId);
+    }
 }
 
 // Load students when edit modal opens
@@ -903,7 +1036,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         .then(res => res.json())
                         .then(json => {
                             const items = json.data || [];
-                            renderStudentsUnschWithAssigned({{ $item['group_id'] }}, items, currentAssignedIds{{ $item['group_id'] }});
+                            // Use getCurrentAssignedIds to read actual DOM state
+                            const currentIds = getCurrentAssignedIds({{ $item['group_id'] }});
+                            renderStudentsUnschWithAssigned({{ $item['group_id'] }}, items, currentIds);
                         })
                         .catch(e => {
                             document.getElementById('studentsListUnsch{{ $item['group_id'] }}').innerHTML = 
@@ -927,6 +1062,33 @@ document.addEventListener('DOMContentLoaded', function() {
                             .then(json => {
                                 const allStudents = json.data || [];
                                 renderStudentsUnschWithAssigned({{ $item['group_id'] }}, allStudents, currentAssignedIds{{ $item['group_id'] }});
+
+                                // Bind checkbox change handler once to keep counter in sync
+                                const listEl = document.getElementById('assignedStudentsListUnsch' + {{ $item['group_id'] }});
+                                if (listEl && !listEl.dataset.changeBound) {
+                                    listEl.addEventListener('change', (ev) => {
+                                        if (ev.target && ev.target.classList.contains('assigned-checkbox')) {
+                                            const cnt = listEl.querySelectorAll('input.assigned-checkbox:checked').length;
+                                            const cntEl = document.getElementById('assignedCountUnsch' + {{ $item['group_id'] }});
+                                            if (cntEl) cntEl.textContent = cnt;
+                                        }
+                                    });
+                                    listEl.dataset.changeBound = '1';
+                                }
+
+                                // Bind assigned search input to filter right panel independently
+                                const assignedSearchEl = document.getElementById('assignedSearchUnsch' + {{ $item['group_id'] }});
+                                if (assignedSearchEl && !assignedSearchEl.dataset.bound) {
+                                    assignedSearchEl.addEventListener('input', () => {
+                                        const q = (assignedSearchEl.value || '').toLowerCase();
+                                        const items = listEl.querySelectorAll('[data-student-id]');
+                                        items.forEach(it => {
+                                            const text = (it.textContent || '').toLowerCase();
+                                            it.classList.toggle('d-none', q && !text.includes(q));
+                                        });
+                                    });
+                                    assignedSearchEl.dataset.bound = '1';
+                                }
                             });
                     })
                     .catch(e => {
@@ -943,9 +1105,10 @@ function saveUnscheduledGroup(groupId) {
     const form = document.getElementById('editUnscheduledForm' + groupId);
     const formData = new FormData(form);
     
-    // Collect selected students
-    const checkboxes = document.querySelectorAll('#studentsListUnsch' + groupId + ' input[type="checkbox"]:checked');
-    const studentIds = Array.from(checkboxes).map(cb => cb.value);
+    // Collect assigned students from the assigned list (right panel)
+    const assignedList = document.getElementById('assignedStudentsListUnsch' + groupId);
+    const checked = assignedList.querySelectorAll('input.assigned-checkbox:checked');
+    const studentIds = Array.from(checked).map(el => el.value);
     
     const data = {
         name: formData.get('name'),
