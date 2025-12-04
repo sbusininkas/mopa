@@ -235,6 +235,7 @@ function setupBadgeDragDrop() {
         });
         updatedBadge.addEventListener('drop', async e => {
             e.preventDefault();
+            e.stopPropagation(); // PREVENT parent drop handler from firing!
             updatedBadge.style.opacity = '1';
             updatedBadge.style.transform = 'scale(1)';
             const dragged = window.draggedState?.dragged;
@@ -703,23 +704,8 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
     document.addEventListener('keydown', closeOnEscape);
 }
 
-// Enable right-click context menu on scheduled badges in teachers view
-document.addEventListener('DOMContentLoaded', function(){
-    document.querySelectorAll('#teachersGrid .tt-trigger[draggable="true"]').forEach(function(el){
-        // add contextmenu similar to teacher view
-        el.addEventListener('contextmenu', function(e){
-            e.preventDefault();
-            // remove previous selections
-            document.querySelectorAll('.lesson-selected').forEach(sel=> sel.classList.remove('lesson-selected'));
-            el.classList.add('lesson-selected');
-            const slotId = el.dataset.slotId;
-            const groupId = el.dataset.groupId;
-            const groupName = el.dataset.groupName || 'Pamoka';
-            const subjectName = el.dataset.subjectName || '';
-            showContextMenu(e, slotId, groupId, groupName, subjectName, el);
-        });
-    });
-});
+// NOTE: Context menu is already initialized in initBadgeDrag() function
+// No need for duplicate DOMContentLoaded listener
 
 async function openGroupEditModal(groupId) {
     try {
@@ -1965,32 +1951,7 @@ async function addLessonToSlot(groupId, teacherId, day, slot, tempRoomId) {
             if (window.bootstrap) {
                 const badge = cell.querySelector('.tt-trigger');
                 new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-                // init drag for scheduled badges
-                (function initBadgeDrag(el){
-                    if (!el) return;
-                    el.addEventListener('dragstart', e => {
-                        dragged = el;
-                        draggedKind = 'scheduled';
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('text/plain', el.dataset.slotId || '');
-                        el.classList.add('dragging');
-                    });
-                    el.addEventListener('dragend', () => {
-                        dragged?.classList.remove('dragging');
-                        dragged = null;
-                        draggedKind = null;
-                    });
-                    el.addEventListener('contextmenu', e => {
-                        e.preventDefault();
-                        document.querySelectorAll('.lesson-selected').forEach(sel => sel.classList.remove('lesson-selected'));
-                        el.classList.add('lesson-selected');
-                        const slotId = el.dataset.slotId;
-                        const gId = el.dataset.groupId;
-                        const gName = el.dataset.groupName || 'Pamoka';
-                        const sName = el.dataset.subjectName || '';
-                        showContextMenu(e, slotId, gId, gName, sName, el);
-                    });
-                })(badge);
+                initBadgeDrag(badge);
             }
         }
         // Update unscheduled list counts if backend provided

@@ -153,7 +153,7 @@
                                 <select name="teacher_login_key_id" class="form-select" required>
                                     <option value="">-- Pasirinkite --</option>
                                     <?php $__currentLoopData = $school->loginKeys()->where('type','teacher')->orderBy('last_name')->orderBy('first_name')->get(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $teacher): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                        <option value="<?php echo e($teacher->id); ?>" <?php echo e($item['teacher_login_key_id'] == $teacher->id ? 'selected' : ''); ?>><?php echo e($teacher->full_name); ?></option>
+                                        <option value="<?php echo e($teacher->id); ?>" <?php echo e(($item['teacher_login_key_id'] ?? null) == $teacher->id ? 'selected' : ''); ?>><?php echo e($teacher->full_name); ?></option>
                                     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                 </select>
                             </div>
@@ -162,7 +162,7 @@
                                 <select name="room_id" class="form-select" required>
                                     <option value="">-- Pasirinkite --</option>
                                     <?php $__currentLoopData = $school->rooms; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $room): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                        <option value="<?php echo e($room->id); ?>"><?php echo e($room->number); ?> <?php echo e($room->name); ?></option>
+                                        <option value="<?php echo e($room->id); ?>" <?php echo e(($item['room_id'] ?? null) == $room->id ? 'selected' : ''); ?>><?php echo e($room->number); ?> <?php echo e($room->name); ?></option>
                                     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                 </select>
                             </div>

@@ -542,6 +542,9 @@ class TimetableController extends Controller
         $studentIds = $originalGroup->students()->pluck('login_keys.id')->toArray();
         $newGroup->students()->sync($studentIds);
         
+        // Load relationships for the new group to use in generation_report
+        $newGroup->load(['subject', 'teacherLoginKey.user', 'room']);
+        
         // Reduce original group's lessons_per_week
         $originalGroup->update([
             'lessons_per_week' => $originalGroup->lessons_per_week - $newGroupLessons
@@ -613,20 +616,50 @@ class TimetableController extends Controller
             // Get all related group IDs (original + all copies)
             $allRelatedIds = $trueOriginalGroup->getAllRelatedGroupIds();
             
-            // Update remaining_lessons for all related groups
+            $originalEntryFound = false;
+            
+            // Update remaining_lessons for original group entry - subtract the lessons moved to copy
             foreach ($report['unscheduled'] as &$u) {
-                if (in_array($u['group_id'] ?? null, $allRelatedIds) && ($u['remaining_lessons'] ?? 0) > 0) {
-                    $u['remaining_lessons'] = max(0, $u['remaining_lessons'] - 1);
+                if (in_array($u['group_id'] ?? null, $allRelatedIds)) {
+                    if ($u['group_id'] == $trueOriginalGroup->id) {
+                        $originalEntryFound = true;
+                        // Subtract all lessons assigned to new group (R_o - N)
+                        $u['remaining_lessons'] = max(0, ($u['remaining_lessons'] ?? 0) - $newGroupLessons);
+                    }
                 }
             }
             unset($u);
+            
+            // Add new entry for the new copy group with remaining lessons
+            // New group has $newGroupLessons total, we inserted 1, so remaining = $newGroupLessons - 1
+            $newGroupRemaining = $newGroupLessons - 1;
+            if ($newGroupRemaining > 0) {
+                $report['unscheduled'][] = [
+                    'group_id' => $newGroup->id,
+                    'group_name' => $newGroup->name,
+                    'subject_id' => $newGroup->subject_id,
+                    'subject_name' => $newGroup->subject->name ?? '—',
+                    'teacher_login_key_id' => $newGroup->teacher_login_key_id,
+                    'teacher_name' => $newGroup->teacherLoginKey->user->full_name ?? '—',
+                    'room_id' => $newGroup->room_id,
+                    'room_number' => $newGroup->room->number ?? null,
+                    'room_name' => $newGroup->room->name ?? null,
+                    'total_lessons' => $newGroupLessons,
+                    'remaining_lessons' => $newGroupRemaining,
+                    'requested_lessons' => $newGroupLessons,
+                    'reasons' => [],
+                    'reasons_translated' => [],
+                ];
+            }
             
             // Recalculate counts
             $report['unscheduled_units'] = 0;
             $filtered = [];
             foreach ($report['unscheduled'] as $entry) {
                 $report['unscheduled_units'] += $entry['remaining_lessons'] ?? 0;
-                if (($entry['remaining_lessons'] ?? 0) > 0) { $filtered[] = $entry; }
+                if (($entry['remaining_lessons'] ?? 0) > 0) { 
+                    $filtered[] = $entry; 
+                }
             }
             $report['unscheduled'] = $filtered;
             $report['unscheduled_count'] = count($filtered);
@@ -1567,6 +1600,99 @@ class TimetableController extends Controller
 
         return redirect()->route('schools.timetables.show', [$school, $copy])
             ->with('success', 'Tvarkaraštis nukopijuotas su visais duomenimis');
+    }
+
+    public function allTeachersWorkingDays(School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        // Get all teachers used in this timetable
+        $teacherIds = $timetable->groups()
+            ->whereNotNull('teacher_login_key_id')
+            ->distinct()
+            ->pluck('teacher_login_key_id')
+            ->toArray();
+        
+        if (empty($teacherIds)) {
+            return response()->json([]);
+        }
+        
+        // Get teacher login keys with their working days
+        $teachers = \App\Models\LoginKey::whereIn('id', $teacherIds)
+            ->with(['user', 'teacherWorkingDays' => function($query) use ($timetable) {
+                $query->where('timetable_id', $timetable->id);
+            }])
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
+        
+        $result = [];
+        foreach ($teachers as $teacher) {
+            $workingDays = $teacher->teacherWorkingDays
+                ->pluck('day_of_week')
+                ->toArray();
+            
+            $teacherName = trim($teacher->first_name . ' ' . $teacher->last_name);
+            
+            $result[] = [
+                'teacher_id' => $teacher->id,
+                'teacher_name' => $teacherName,
+                'working_days' => $workingDays,
+            ];
+        }
+        
+        return response()->json($result);
+    }
+
+    public function getTeacherWorkingDays(School $school, Timetable $timetable, $teacherId)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $teacher = \App\Models\LoginKey::findOrFail($teacherId);
+        
+        $workingDays = \App\Models\TimetableTeacherWorkingDay::where('timetable_id', $timetable->id)
+            ->where('teacher_login_key_id', $teacherId)
+            ->pluck('day_of_week')
+            ->toArray();
+        
+        return response()->json([
+            'teacher_id' => $teacher->id,
+            'teacher_name' => $teacher->full_name,
+            'working_days' => $workingDays,
+        ]);
+    }
+
+    public function updateTeacherWorkingDays(School $school, Timetable $timetable, Request $request)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $validated = $request->validate([
+            'teacher_id' => 'required|exists:login_keys,id',
+            'working_days' => 'array',
+            'working_days.*' => 'integer|min:1|max:5',
+        ]);
+        
+        $teacherId = $validated['teacher_id'];
+        $workingDays = $validated['working_days'] ?? [];
+        
+        // Delete existing working days for this teacher in this timetable
+        \App\Models\TimetableTeacherWorkingDay::where('timetable_id', $timetable->id)
+            ->where('teacher_login_key_id', $teacherId)
+            ->delete();
+        
+        // Create new working days (if array is not empty)
+        foreach ($workingDays as $day) {
+            \App\Models\TimetableTeacherWorkingDay::create([
+                'timetable_id' => $timetable->id,
+                'teacher_login_key_id' => $teacherId,
+                'day_of_week' => $day,
+            ]);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Mokytojo darbo dienos atnaujintos',
+        ]);
     }
 
     public function destroy(School $school, Timetable $timetable)

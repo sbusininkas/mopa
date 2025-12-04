@@ -152,7 +152,7 @@
                                 <select name="teacher_login_key_id" class="form-select" required>
                                     <option value="">-- Pasirinkite --</option>
                                     @foreach($school->loginKeys()->where('type','teacher')->orderBy('last_name')->orderBy('first_name')->get() as $teacher)
-                                        <option value="{{ $teacher->id }}" {{ $item['teacher_login_key_id'] == $teacher->id ? 'selected' : '' }}>{{ $teacher->full_name }}</option>
+                                        <option value="{{ $teacher->id }}" {{ ($item['teacher_login_key_id'] ?? null) == $teacher->id ? 'selected' : '' }}>{{ $teacher->full_name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -161,7 +161,7 @@
                                 <select name="room_id" class="form-select" required>
                                     <option value="">-- Pasirinkite --</option>
                                     @foreach($school->rooms as $room)
-                                        <option value="{{ $room->id }}">{{ $room->number }} {{ $room->name }}</option>
+                                        <option value="{{ $room->id }}" {{ ($item['room_id'] ?? null) == $room->id ? 'selected' : '' }}>{{ $room->number }} {{ $room->name }}</option>
                                     @endforeach
                                 </select>
                             </div>

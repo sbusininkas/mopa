@@ -93,7 +93,9 @@ class ActiveSchoolController extends Controller
     public function import(Request $request)
     {
         $school = $this->getSchool($request);
-        return view('admin.login_keys.import', compact('school'));
+        $classes = $school->classes()->orderBy('name')->get();
+        $schoolYears = \App\Helpers\SchoolYearHelper::getSchoolYearsRange();
+        return view('admin.login-keys.import', compact('school', 'classes', 'schoolYears'));
     }
 
     /**

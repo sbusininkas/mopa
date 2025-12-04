@@ -74,6 +74,14 @@ class LoginKey extends Model
     }
 
     /**
+     * Get the teacher's working days for timetables.
+     */
+    public function teacherWorkingDays()
+    {
+        return $this->hasMany(TimetableTeacherWorkingDay::class, 'teacher_login_key_id');
+    }
+
+    /**
      * Generate a new unique key.
      */
     public static function generateKey(): string

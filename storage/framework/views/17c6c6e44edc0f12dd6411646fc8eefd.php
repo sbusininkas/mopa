@@ -235,6 +235,7 @@ function setupBadgeDragDrop() {
         });
         updatedBadge.addEventListener('drop', async e => {
             e.preventDefault();
+            e.stopPropagation(); // PREVENT parent drop handler from firing!
             updatedBadge.style.opacity = '1';
             updatedBadge.style.transform = 'scale(1)';
             const dragged = window.draggedState?.dragged;
@@ -436,17 +437,7 @@ document.addEventListener('DOMContentLoaded', function(){
                 const groupId = dragged.dataset.groupId;
                 const groupName = dragged.dataset.groupName;
                 const subjectName = dragged.dataset.subjectName;
-                // Check conflicts before saving
-                const conflicts = await checkConflicts(groupId, teacherId, day, slot);
-                // Show confirmation dialog with conflict info
-                if (!await showConfirmDialog(groupName, subjectName, day, slot, conflicts, groupId)) {
-                    return; // User cancelled
-                }
-                // If there are blocking conflicts, don't save
-                if (conflicts.hasConflicts) {
-                    flashMessage(conflicts.message, 'danger');
-                    return;
-                }
+                
                 try {
                     const resp = await fetch(`<?php echo e(route('schools.timetables.manual-slot', [$school, $timetable])); ?>`, {
                         method: 'POST',
@@ -713,23 +704,8 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
     document.addEventListener('keydown', closeOnEscape);
 }
 
-// Enable right-click context menu on scheduled badges in teachers view
-document.addEventListener('DOMContentLoaded', function(){
-    document.querySelectorAll('#teachersGrid .tt-trigger[draggable="true"]').forEach(function(el){
-        // add contextmenu similar to teacher view
-        el.addEventListener('contextmenu', function(e){
-            e.preventDefault();
-            // remove previous selections
-            document.querySelectorAll('.lesson-selected').forEach(sel=> sel.classList.remove('lesson-selected'));
-            el.classList.add('lesson-selected');
-            const slotId = el.dataset.slotId;
-            const groupId = el.dataset.groupId;
-            const groupName = el.dataset.groupName || 'Pamoka';
-            const subjectName = el.dataset.subjectName || '';
-            showContextMenu(e, slotId, groupId, groupName, subjectName, el);
-        });
-    });
-});
+// NOTE: Context menu is already initialized in initBadgeDrag() function
+// No need for duplicate DOMContentLoaded listener
 
 async function openGroupEditModal(groupId) {
     try {
@@ -1477,7 +1453,11 @@ async function findAvailableSlots(groupId, groupName, subjectName, teacherId) {
             badge.innerHTML='<i class="bi bi-check-circle"></i>'; // Laisvas indikacija
             badge.title='Laisvas';
             badge.style.cursor='pointer';
-            badge.onclick=()=>showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'free', [], availableRooms, currentRoomId);
+            // Add click handler
+            badge.addEventListener('click', function(e) {
+                e.stopPropagation();
+                showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'free', [], availableRooms, currentRoomId);
+            });
         } else {
             const student = conf.find(c=>typeof c==='object' && c.type==='students');
             const room = conf.find(c=>typeof c==='object' && c.type==='room');
@@ -1515,7 +1495,13 @@ async function findAvailableSlots(groupId, groupName, subjectName, teacherId) {
                 badge.title='Kitas konfliktas';
             }
             badge.style.cursor='pointer';
-            badge.onclick=()=>showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, r.status, conf, availableRooms, currentRoomId);
+            // Add click handler BEFORE appending
+            const statusCopy = r.status;
+            const conflictsCopy = conf.slice();
+            badge.addEventListener('click', function(e) {
+                e.stopPropagation();
+                showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, statusCopy, conflictsCopy, availableRooms, currentRoomId);
+            });
         }
         cell.style.position='relative';
         cell.appendChild(badge);
@@ -1965,32 +1951,7 @@ async function addLessonToSlot(groupId, teacherId, day, slot, tempRoomId) {
             if (window.bootstrap) {
                 const badge = cell.querySelector('.tt-trigger');
                 new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-                // init drag for scheduled badges
-                (function initBadgeDrag(el){
-                    if (!el) return;
-                    el.addEventListener('dragstart', e => {
-                        dragged = el;
-                        draggedKind = 'scheduled';
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('text/plain', el.dataset.slotId || '');
-                        el.classList.add('dragging');
-                    });
-                    el.addEventListener('dragend', () => {
-                        dragged?.classList.remove('dragging');
-                        dragged = null;
-                        draggedKind = null;
-                    });
-                    el.addEventListener('contextmenu', e => {
-                        e.preventDefault();
-                        document.querySelectorAll('.lesson-selected').forEach(sel => sel.classList.remove('lesson-selected'));
-                        el.classList.add('lesson-selected');
-                        const slotId = el.dataset.slotId;
-                        const gId = el.dataset.groupId;
-                        const gName = el.dataset.groupName || 'Pamoka';
-                        const sName = el.dataset.subjectName || '';
-                        showContextMenu(e, slotId, gId, gName, sName, el);
-                    });
-                })(badge);
+                initBadgeDrag(badge);
             }
         }
         // Update unscheduled list counts if backend provided
