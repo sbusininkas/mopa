@@ -61,6 +61,18 @@ class AuthController extends Controller
 
         if (Auth::attempt($credentials, $request->boolean('remember'))) {
             $request->session()->regenerate();
+            
+            // Auto-activate first available school
+            $user = Auth::user();
+            
+            // Check if user has schools (either as admin or member)
+            $firstSchool = $user->schools()->first();
+            
+            if ($firstSchool) {
+                // Activate the first school
+                session(['active_school_id' => $firstSchool->id]);
+            }
+            
             return redirect('/dashboard')->with('success', 'Login successful!');
         }
 

@@ -54,4 +54,4 @@
         </a>
     </nav>
 <?php endif; ?>
-<?php /**PATH C:\Users\herom\Desktop\Projektai\mopa\resources\views/partials/sidebar-supervisor-school.blade.php ENDPATH**/ ?>
+<?php /**PATH C:\xampp\htdocs\mopa\resources\views/partials/sidebar-supervisor-school.blade.php ENDPATH**/ ?>

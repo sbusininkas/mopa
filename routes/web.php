@@ -5,9 +5,10 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\UserLoginKeyController;
+use App\Http\Controllers\SchoolActivationController;
 
 Route::get('/', function () {
-    return view('welcome');
+    return view('welcome-new');
 });
 
 // Authentication Routes
@@ -18,6 +19,13 @@ Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+// School Activation Routes (Protected)
+Route::middleware('auth')->group(function () {
+    Route::get('/activation', [SchoolActivationController::class, 'index'])->name('activation.index');
+    Route::post('/activation/admin-key', [SchoolActivationController::class, 'activateWithAdminKey'])->name('activation.admin-key');
+    Route::post('/activation/user-token', [SchoolActivationController::class, 'activateWithUserToken'])->name('activation.user-token');
+});
 
 // Dashboard Routes (Protected)
 Route::middleware('auth')->group(function () {
@@ -125,6 +133,7 @@ Route::middleware(['auth', 'school.admin.or.supervisor'])->group(function () {
     Route::post('/admin/schools/{school}/timetables/{timetable}/check-conflict', [\App\Http\Controllers\TimetableController::class, 'checkConflict'])->name('schools.timetables.check-conflict');
     Route::post('/admin/schools/{school}/timetables/{timetable}/manual-slot', [\App\Http\Controllers\TimetableController::class, 'storeManualSlot'])->name('schools.timetables.manual-slot');
     Route::post('/admin/schools/{school}/timetables/{timetable}/manual-slot-alt-room', [\App\Http\Controllers\TimetableController::class, 'storeManualSlotWithAlternativeRoom'])->name('schools.timetables.manual-slot-alt-room');
+    Route::get('/admin/schools/{school}/timetables/{timetable}/group-info/{group}', [\App\Http\Controllers\TimetableController::class, 'getGroupInfo'])->name('schools.timetables.group-info');
     Route::post('/admin/schools/{school}/timetables/{timetable}/bulk-conflicts', [\App\Http\Controllers\TimetableController::class, 'bulkCheckConflicts'])->name('schools.timetables.bulk-conflicts');
     Route::post('/admin/schools/{school}/timetables/{timetable}/unschedule-slot', [\App\Http\Controllers\TimetableController::class, 'unscheduleSlot'])->name('schools.timetables.unschedule-slot');
     Route::post('/admin/schools/{school}/timetables/{timetable}/move-slot', [\App\Http\Controllers\TimetableController::class, 'moveSlot'])->name('schools.timetables.move-slot');

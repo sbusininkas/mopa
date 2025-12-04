@@ -12,4 +12,4 @@
         <span>Vartotojai</span>
     </a>
 </nav>
-<?php /**PATH C:\Users\herom\Desktop\Projektai\mopa\resources\views/partials/sidebar-supervisor.blade.php ENDPATH**/ ?>
+<?php /**PATH C:\xampp\htdocs\mopa\resources\views/partials/sidebar-supervisor.blade.php ENDPATH**/ ?>

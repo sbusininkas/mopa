@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class School extends Model
 {
@@ -13,7 +14,26 @@ class School extends Model
         'name',
         'address',
         'phone',
+        'admin_key',
     ];
+
+    protected $hidden = [
+        'admin_key',
+    ];
+
+    /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (!$model->admin_key) {
+                $model->admin_key = Str::random(12);
+            }
+        });
+    }
 
     /**
      * The users that belong to the school.

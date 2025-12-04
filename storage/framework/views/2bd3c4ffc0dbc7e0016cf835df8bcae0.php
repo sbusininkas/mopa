@@ -51,4 +51,4 @@
         </div>
     </div>
 </div>
-<?php /**PATH C:\Users\herom\Desktop\Projektai\mopa\resources\views/partials/active_school.blade.php ENDPATH**/ ?>
+<?php /**PATH C:\xampp\htdocs\mopa\resources\views/partials/active_school.blade.php ENDPATH**/ ?>

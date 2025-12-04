@@ -35,6 +35,12 @@ class GenerateTimetableJob implements ShouldQueue
         ]);
 
         try {
+            // Clear all group copy relationships before generating new timetable
+            $groupIds = $this->timetable->groups()->pluck('id');
+            \App\Models\TimetableGroupCopy::whereIn('original_group_id', $groupIds)
+                ->orWhereIn('copy_group_id', $groupIds)
+                ->delete();
+            
             $result = $generator->generate($this->timetable, function(int $percent) {
                 if ($percent - ($this->timetable->generation_progress ?? 0) >= 3) {
                     $this->timetable->update(['generation_progress' => $percent]);

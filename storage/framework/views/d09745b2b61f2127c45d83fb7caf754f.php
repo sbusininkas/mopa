@@ -490,4 +490,4 @@
     <?php echo $__env->yieldPushContent('scripts'); ?>
 </body>
 </html>
-<?php /**PATH C:\Users\herom\Desktop\Projektai\mopa\resources\views/layouts/admin.blade.php ENDPATH**/ ?>
+<?php /**PATH C:\xampp\htdocs\mopa\resources\views/layouts/admin.blade.php ENDPATH**/ ?>

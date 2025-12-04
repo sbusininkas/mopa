@@ -18,7 +18,7 @@
         </div>
         <div class="col-md-3">
             <div class="card h-100" id="unscheduledPanel">
-                <div class="card-header p-2"><strong>Nesuplanuotos grupės</strong></div>
+                <div class="card-header p-2"><strong>Nesuplanuotos pamokos</strong></div>
                 <div class="card-body p-2" style="max-height:220px; overflow:auto;">
                     @forelse($unscheduled as $u)
                         <div class="unscheduled-item mb-1 d-flex align-items-center" draggable="true"
@@ -38,6 +38,7 @@
                                     @if(!empty($u['teacher_name'] ?? $u['teacher'] ?? ''))
                                         <span class="unscheduled-teacher">{{ $u['teacher_name'] ?? $u['teacher'] }}</span>
                                     @endif
+                                    <span class="unscheduled-room"><i class="bi bi-door-closed"></i> {{ $u['room_number'] ?? '—' }}</span>
                                 </div>
                             </div>
                             @if(!empty($u['teacher_login_key_id']))
@@ -127,8 +128,7 @@
                                                     $tooltipB64 = base64_encode($tooltipHtml);
                                                 @endphp
                                                 <span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" data-tooltip-b64="{{ $tooltipB64 }}" draggable="true"
-                                                    if (draggedKind === 'unscheduled') {
-                                                        let scheduled=false;
+                                                      data-kind="scheduled"
                                                       data-slot-id="{{ $cell['slot_id'] }}"
                                                       data-group-id="{{ $cell['group_id'] }}"
                                                       data-teacher-id="{{ $cell['teacher_id'] }}"
@@ -214,40 +214,153 @@
     });
 })();
 
+// Setup badge drag-over listeners for room conflict badges (must be OUTSIDE DOMContentLoaded)
+function setupBadgeDragDrop() {
+    document.querySelectorAll('.availability-badge.bg-warning').forEach(badge => {
+        // Remove existing listeners to avoid duplicates
+        const newBadge = badge.cloneNode(true);
+        badge.parentNode.replaceChild(newBadge, badge);
+        const updatedBadge = newBadge;
+        
+        updatedBadge.addEventListener('dragover', e => {
+            if (!window.draggedState?.dragged || window.draggedState?.draggedKind !== 'unscheduled') return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            updatedBadge.style.opacity = '0.7';
+            updatedBadge.style.transform = 'scale(1.2)';
+        });
+        updatedBadge.addEventListener('dragleave', () => {
+            updatedBadge.style.opacity = '1';
+            updatedBadge.style.transform = 'scale(1)';
+        });
+        updatedBadge.addEventListener('drop', async e => {
+            e.preventDefault();
+            updatedBadge.style.opacity = '1';
+            updatedBadge.style.transform = 'scale(1)';
+            const dragged = window.draggedState?.dragged;
+            const draggedKind = window.draggedState?.draggedKind;
+            if (!dragged || draggedKind !== 'unscheduled') return;
+            
+            // Get cell info (parent .drop-target)
+            const cell = updatedBadge.closest('.drop-target');
+            if (!cell) return;
+            
+            const groupId = dragged.dataset.groupId;
+            const groupName = dragged.dataset.groupName;
+            const subjectName = dragged.dataset.subjectName;
+            const teacherId = cell.dataset.teacherId;
+            const day = cell.dataset.day;
+            const slot = cell.dataset.slot;
+            
+            // Fetch conflict data
+            try {
+                const resp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, day: day, slot: slot })
+                });
+                const data = await resp.json();
+                console.log('Drag-drop conflict check:', data);
+                
+                // Check if there's a room conflict in the conflicts array
+                const hasRoomConflict = data.conflicts && Array.isArray(data.conflicts) && data.conflicts.some(c => 
+                    typeof c === 'object' && c.type === 'room'
+                );
+                
+                // If it's only a room conflict (no students/teacher conflicts), show room conflict modal
+                if (hasRoomConflict && data.available_rooms) {
+                    console.log('Room conflict detected, showing modal');
+                    showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'room_conflict', data.conflicts, data.available_rooms, data.current_room?.id);
+                    return;
+                }
+                
+                // If there are blocking conflicts (not just room), show error
+                if (data.hasConflicts) {
+                    console.log('Other conflicts detected:', data.message);
+                    showErrorModal('Aptiktai konfliktai', data.message || 'Šiame langelyje negalima pridėti pamokos');
+                    return;
+                }
+                
+                // If no conflicts, add lesson directly
+                console.log('No conflicts, adding lesson');
+                try {
+                    const addResp = await fetch(`{{ route('schools.timetables.manual-slot', [$school, $timetable]) }}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, day: day, slot: slot })
+                    });
+                    const addData = await addResp.json();
+                    console.log('Add response:', addData);
+                    if (addResp.ok && addData.success) {
+                        flashMessage('Pamoka sėkmingai pridėta', 'success');
+                        if (addData.group_id && addData.group_data) {
+                            updateUnscheduledList(addData.group_id, addData.remaining_lessons, addData.group_data);
+                        }
+                    } else if (addData.conflict_type === 'room' && addData.available_rooms) {
+                        console.log('Room conflict from add, showing modal');
+                        showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'room_conflict', [], addData.available_rooms, addData.current_room?.id);
+                    } else {
+                        console.log('Add failed:', addData.error);
+                        showErrorModal('Klaida', addData.error || 'Nepavyko pridėti pamokos');
+                    }
+                } catch(err) {
+                    console.error('Add request error:', err);
+                    showErrorModal('Klaida', 'Nepavyko siunčiant užklausą');
+                }
+            } catch(err) {
+                console.error('Check-conflict error:', err);
+                showErrorModal('Klaida', 'Nepavyko atlikti tikrinimo');
+            }
+        });
+    });
+}
+
 // Drag & drop manual scheduling
 document.addEventListener('DOMContentLoaded', function(){
     const UNSCHEDULED_SELECTOR = '.unscheduled-item';
-    let dragged = null;
-    let draggedKind = null; // 'unscheduled' | 'scheduled'
+    
+    // Store drag state globally
+    window.draggedState = {
+        dragged: null,
+        draggedKind: null
+    };
     
     document.querySelectorAll(UNSCHEDULED_SELECTOR).forEach(el => {
         el.addEventListener('dragstart', e => {
-            dragged = el;
-            draggedKind = 'unscheduled';
+            window.draggedState.dragged = el;
+            window.draggedState.draggedKind = 'unscheduled';
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', el.dataset.groupId);
             el.classList.add('dragging');
         });
         el.addEventListener('dragend', () => {
-            dragged?.classList.remove('dragging');
-            dragged = null;
-            draggedKind = null;
+            window.draggedState.dragged?.classList.remove('dragging');
+            window.draggedState.dragged = null;
+            window.draggedState.draggedKind = null;
         });
     });
     // Make existing scheduled badges draggable
     function initBadgeDrag(el){
         if (!el) return;
         el.addEventListener('dragstart', e => {
-            dragged = el;
-            draggedKind = 'scheduled';
+            window.draggedState.dragged = el;
+            window.draggedState.draggedKind = 'scheduled';
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', el.dataset.slotId || '');
             el.classList.add('dragging');
         });
         el.addEventListener('dragend', () => {
-            dragged?.classList.remove('dragging');
-            dragged = null;
-            draggedKind = null;
+            window.draggedState.dragged?.classList.remove('dragging');
+            window.draggedState.dragged = null;
+            window.draggedState.draggedKind = null;
         });
         
         // Add right-click context menu to move back to unscheduled
@@ -284,16 +397,19 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     document.querySelectorAll('.tt-trigger[draggable="true"]').forEach(initBadgeDrag);
     
+    // Initialize badge drag-drop
+    setupBadgeDragDrop();
+
     document.querySelectorAll('.drop-target').forEach(cell => {
         cell.addEventListener('dragover', e => {
-            if (!dragged) return;
+            if (!window.draggedState?.dragged) return;
             const rowTeacherId = String(cell.dataset.teacherId || '');
             let canDrop = true;
-            if (draggedKind === 'unscheduled') {
-                const itemTeacherId = String(dragged.dataset.teacherId || '');
+            if (window.draggedState.draggedKind === 'unscheduled') {
+                const itemTeacherId = String(window.draggedState.dragged.dataset.teacherId || '');
                 canDrop = !!itemTeacherId && itemTeacherId === rowTeacherId;
-            } else if (draggedKind === 'scheduled') {
-                const itemTeacherId = String(dragged.dataset.teacherId || '');
+            } else if (window.draggedState.draggedKind === 'scheduled') {
+                const itemTeacherId = String(window.draggedState.dragged.dataset.teacherId || '');
                 canDrop = !!itemTeacherId && itemTeacherId === rowTeacherId;
             }
             if (!canDrop) {
@@ -309,27 +425,18 @@ document.addEventListener('DOMContentLoaded', function(){
         cell.addEventListener('drop', async e => {
             e.preventDefault();
             cell.classList.remove('drop-hover');
-            if (!dragged) return;
+            if (!window.draggedState?.dragged) return;
             
             const rowTeacherId = cell.dataset.teacherId;
             const teacherId = cell.dataset.teacherId;
             const day = cell.dataset.day;
             const slot = cell.dataset.slot;
-            if (draggedKind === 'unscheduled') {
+            if (window.draggedState.draggedKind === 'unscheduled') {
+                const dragged = window.draggedState.dragged;
                 const groupId = dragged.dataset.groupId;
                 const groupName = dragged.dataset.groupName;
                 const subjectName = dragged.dataset.subjectName;
-                // Check conflicts before saving
-                const conflicts = await checkConflicts(groupId, teacherId, day, slot);
-                // Show confirmation dialog with conflict info
-                if (!await showConfirmDialog(groupName, subjectName, day, slot, conflicts, groupId)) {
-                    return; // User cancelled
-                }
-                // If there are blocking conflicts, don't save
-                if (conflicts.hasConflicts) {
-                    flashMessage(conflicts.message, 'danger');
-                    return;
-                }
+                
                 try {
                     const resp = await fetch(`{{ route('schools.timetables.manual-slot', [$school, $timetable]) }}`, {
                         method: 'POST',
@@ -383,7 +490,8 @@ document.addEventListener('DOMContentLoaded', function(){
                 } catch(err) {
                     showErrorModal('Klaida', 'Klaida siunčiant užklausą');
                 }
-            } else if (draggedKind === 'scheduled') {
+            } else if (window.draggedState.draggedKind === 'scheduled') {
+                const dragged = window.draggedState.dragged;
                 // Move existing slot
                 const slotId = dragged.dataset.slotId;
                 const groupName = dragged.dataset.groupName || 'Grupė';
@@ -972,22 +1080,16 @@ function showErrorModal(title, message) {
 }
 
 async function showRoomConflictModal(conflictData, cell, groupId, teacherId, day, slot, dragged) {
+    const groupName = conflictData.group.name;
+    const subjectName = conflictData.group.subject_name;
+    
     const modal = document.createElement('div');
     modal.className = 'modal fade';
     modal.tabIndex = -1;
     
-    const roomOptionsHtml = conflictData.available_rooms.map(room => `
-        <div class="form-check mb-2">
-            <input class="form-check-input room-option" type="radio" name="alternative_room" 
-                   id="room_${room.id}" value="${room.id}" data-room-id="${room.id}">
-            <label class="form-check-label d-flex align-items-center" for="room_${room.id}">
-                <span class="flex-grow-1">${room.label}</span>
-                <span class="room-availability-badge ms-2" data-room-id="${room.id}">
-                    <span class="badge bg-secondary"><i class="bi bi-dash-circle"></i> Pasirinkite</span>
-                </span>
-            </label>
-        </div>
-    `).join('');
+    const roomOptionsHtml = conflictData.available_rooms.map(room => 
+        `<option value="${room.id}">${room.label}</option>`
+    ).join('');
     
     modal.innerHTML = `
         <div class="modal-dialog modal-dialog-centered">
@@ -1006,19 +1108,22 @@ async function showRoomConflictModal(conflictData, cell, groupId, teacherId, day
                     
                     <hr>
                     
-                    <p class="mb-2"><strong>Pasirinkite alternatyvų kabinetą:</strong></p>
-                    <div id="roomOptionsList">
-                        ${roomOptionsHtml}
+                    <div class="mb-3">
+                        <label for="newRoomSelect" class="form-label"><strong>Pasirinkite alternatyvų kabinetą:</strong></label>
+                        <select class="form-select" id="newRoomSelect">
+                            <option value="">-- Pasirinkite kabinetą --</option>
+                            ${roomOptionsHtml}
+                        </select>
                     </div>
                     
-                    <div class="alert alert-info mt-3 mb-0" id="roomSelectionHint">
+                    <div class="alert alert-info mb-0" id="roomSelectionHint">
                         <i class="bi bi-info-circle"></i> Pasirinkite kabinetą, kad patikrintume jo prieinamumą
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
                     <button type="button" class="btn btn-primary" id="saveAlternativeRoom" disabled>
-                        <i class="bi bi-check-circle"></i> Išsaugoti su pasirinktu kabinetu
+                        <i class="bi bi-check-circle"></i> Pridėti
                     </button>
                 </div>
             </div>
@@ -1029,23 +1134,20 @@ async function showRoomConflictModal(conflictData, cell, groupId, teacherId, day
     bsModal.show();
     
     const saveBtn = modal.querySelector('#saveAlternativeRoom');
-    const roomOptionsList = modal.querySelector('#roomOptionsList');
+    const roomSelect = modal.querySelector('#newRoomSelect');
     const hint = modal.querySelector('#roomSelectionHint');
     let selectedRoomId = null;
     let roomAvailability = {};
     
     // Check availability for a specific room
     async function checkRoomAvailability(roomId) {
-        console.log('checkRoomAvailability called for room:', roomId);
-        const badge = modal.querySelector(`.room-availability-badge[data-room-id="${roomId}"]`);
-        if (!badge) {
-            console.error('Badge not found for room:', roomId);
-            return;
-        }
+        if (!roomId) return;
         
-        // Show loading state
-        badge.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span><span class="ms-1">Tikrinama...</span>';
-        console.log('Sending request to check room:', roomId);
+        console.log('Checking room availability for:', roomId);
+        
+        hint.className = 'alert alert-info mb-0';
+        hint.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Tikrinama kabineto prieinamumas...';
+        saveBtn.disabled = true;
         
         try {
             const resp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
@@ -1060,157 +1162,66 @@ async function showRoomConflictModal(conflictData, cell, groupId, teacherId, day
                     teacher_id: teacherId, 
                     day: day, 
                     slot: slot,
-                    check_room_id: roomId
+                    check_room_id: parseInt(roomId, 10)
                 })
             });
             const data = await resp.json();
+            console.log('Availability check response:', data);
             
-            console.log('Room check for', roomId, ':', data);
-            
-            // Check if there's a room conflict
             let hasRoomConflict = false;
             if (data.conflicts && Array.isArray(data.conflicts)) {
                 hasRoomConflict = data.conflicts.some(c => {
-                    if (typeof c === 'object' && c !== null) {
-                        return c.type === 'room';
-                    }
-                    if (typeof c === 'string') {
-                        return c.includes('Kabinetas') || c.includes('užimtas');
-                    }
+                    if (typeof c === 'object' && c !== null) return c.type === 'room';
+                    if (typeof c === 'string') return c.includes('Kabinetas') || c.includes('užimtas');
                     return false;
                 });
             }
             
             const isAvailable = !hasRoomConflict;
             roomAvailability[roomId] = isAvailable;
+            console.log('Room available:', isAvailable);
             
             if (isAvailable) {
-                badge.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Laisvas</span>';
+                hint.className = 'alert alert-success mb-0';
+                hint.innerHTML = '<i class="bi bi-check-circle"></i> Pasirinktas kabinetas laisvas. Galite pridėti.';
+                saveBtn.disabled = false;
             } else {
-                badge.innerHTML = '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Užimtas</span>';
-                // Disable this radio button
-                const radio = modal.querySelector(`#room_${roomId}`);
-                if (radio) {
-                    radio.disabled = true;
-                    radio.checked = false;
-                    radio.closest('.form-check').classList.add('text-muted');
-                }
-                
-                // If this was the selected room, clear selection
-                if (selectedRoomId === roomId) {
-                    selectedRoomId = null;
-                    saveBtn.disabled = true;
-                    hint.className = 'alert alert-danger mt-3 mb-0';
-                    hint.innerHTML = '<i class="bi bi-x-circle"></i> Pasirinktas kabinetas užimtas. Pasirinkite kitą.';
-                }
+                hint.className = 'alert alert-danger mb-0';
+                hint.innerHTML = '<i class="bi bi-x-circle"></i> Pasirinktas kabinetas užimtas. Pasirinkite kitą.';
+                saveBtn.disabled = true;
             }
         } catch (err) {
-            badge.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-question-circle"></i> Klaida</span>';
+            console.error('Error checking availability:', err);
+            hint.className = 'alert alert-secondary mb-0';
+            hint.innerHTML = '<i class="bi bi-question-circle"></i> Nepavyko patikrinti. Bandykite dar kartą.';
             roomAvailability[roomId] = false;
+            saveBtn.disabled = true;
         }
     }
     
-    // Handle room selection - check availability when selected
-    roomOptionsList.addEventListener('change', async (e) => {
-        console.log('Change event fired', e.target);
-        if (e.target.classList.contains('room-option')) {
-            selectedRoomId = parseInt(e.target.value);
-            console.log('Selected room ID:', selectedRoomId);
-            
-            // Show checking state
+    roomSelect.addEventListener('change', async (e) => {
+        console.log('Room select changed:', e.target.value);
+        selectedRoomId = e.target.value ? parseInt(e.target.value) : null;
+        
+        if (!selectedRoomId) {
+            hint.className = 'alert alert-info mb-0';
+            hint.innerHTML = '<i class="bi bi-info-circle"></i> Pasirinkite kabinetą, kad patikrintume jo prieinamumą';
             saveBtn.disabled = true;
-            hint.className = 'alert alert-info mt-3 mb-0';
-            hint.innerHTML = '<i class="bi bi-hourglass-split"></i> Tikrinama kabineto prieinamumas...';
-            
-            console.log('Starting check for room:', selectedRoomId);
-            // Check this specific room
-            await checkRoomAvailability(selectedRoomId);
-            console.log('Check completed. Availability:', roomAvailability[selectedRoomId]);
-            
-            // Update UI based on result
-            if (roomAvailability[selectedRoomId] === true) {
-                saveBtn.disabled = false;
-                hint.className = 'alert alert-success mt-3 mb-0';
-                hint.innerHTML = '<i class="bi bi-check-circle"></i> Pasirinktas kabinetas laisvas. Galite išsaugoti.';
-            } else if (roomAvailability[selectedRoomId] === false) {
-                saveBtn.disabled = true;
-                hint.className = 'alert alert-danger mt-3 mb-0';
-                hint.innerHTML = '<i class="bi bi-x-circle"></i> Pasirinktas kabinetas užimtas. Pasirinkite kitą.';
-            }
-        }
-    });
-    
-    // Handle save button
-    saveBtn.addEventListener('click', async () => {
-        if (!selectedRoomId || roomAvailability[selectedRoomId] !== true) {
             return;
         }
         
-        saveBtn.disabled = true;
-        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Išsaugoma...';
+        await checkRoomAvailability(selectedRoomId);
+    });
+    
+    saveBtn.addEventListener('click', async () => {
+        console.log('Save button clicked, selectedRoomId:', selectedRoomId, 'available:', roomAvailability[selectedRoomId]);
+        if (!selectedRoomId || roomAvailability[selectedRoomId] !== true) return;
         
-        try {
-            const resp = await fetch(`{{ route('schools.timetables.manual-slot-alt-room', [$school, $timetable]) }}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    group_id: groupId, 
-                    teacher_id: teacherId, 
-                    day: day, 
-                    slot: slot,
-                    alternative_room_id: selectedRoomId
-                })
-            });
-            const data = await resp.json();
-            
-            if (!resp.ok || !data.success) {
-                showErrorModal('Klaida', data.error || 'Nepavyko įtraukti pamokos');
-                bsModal.hide();
-                return;
-            }
-            
-            // Build tooltip for new cell
-            const tooltipHtml = `<div class=\"tt-inner\">`
-              + `<div class=\"tt-row tt-row-head\"><i class=\"bi bi-clock-history tt-ico\"></i><span class=\"tt-val\">${day} • ${slot} pamoka</span></div>`
-              + `<div class=\"tt-divider\"></div>`
-              + `<div class=\"tt-row\"><i class=\"bi bi-collection-fill tt-ico\"></i><span class=\"tt-val\">${data.html.group}</span></div>`
-              + `<div class=\"tt-row\"><i class=\"bi bi-book-half tt-ico\"></i><span class=\"tt-val\">${data.html.subject ?? '—'}</span></div>`
-              + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${data.html.room ?? '—'}</span></div>`
-              + `<div class=\"tt-row\"><i class=\"bi bi-person-badge tt-ico\"></i><span class=\"tt-val\">${data.html.teacher_name ?? '—'}</span></div>`
-              + `</div>`;
-            const b64 = btoa(unescape(encodeURIComponent(tooltipHtml)));
-            cell.innerHTML = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" data-tooltip-b64=\"${b64}\" draggable=\"true\"
-                    data-kind=\"scheduled\"
-                    data-slot-id=\"${data.html.slot_id}\"
-                    data-group-id=\"${groupId}\"
-                    data-teacher-id=\"${data.html.teacher_id}\"
-                    data-group-name=\"${data.html.group}\"
-                    data-subject-name=\"${data.html.subject ?? ''}\"
-            >${data.html.group}</span>`;
-            
-            // re-init tooltip
-            if (window.bootstrap) {
-                const decoded = tooltipHtml;
-                const badge = cell.querySelector('.tt-trigger');
-                new bootstrap.Tooltip(badge, { title: decoded, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-                initBadgeDrag(badge);
-            }
-            
-            // Update unscheduled list using backend data
-            if (data.group_id && data.remaining_lessons !== undefined && data.group_data) {
-                updateUnscheduledList(data.group_id, data.remaining_lessons, data.group_data);
-            }
-            
-            flashMessage('Pamoka sėkmingai įtraukta su alternatyviu kabinetu', 'success');
-            bsModal.hide();
-        } catch(err) {
-            showErrorModal('Klaida', 'Klaida siunčiant užklausą');
-            bsModal.hide();
-        }
+        // Close current modal
+        bsModal.hide();
+        
+        // Open new modal for group copy creation
+        showGroupCopyModal(groupId, groupName, subjectName, teacherId, day, slot, selectedRoomId);
     });
     
     modal.addEventListener('hidden.bs.modal', () => modal.remove());
@@ -1236,7 +1247,8 @@ function updateUnscheduledList(groupId, remainingLessons, groupData){
             div.className='unscheduled-item mb-1 d-flex align-items-center';
             div.draggable=true; div.dataset.kind='unscheduled';
             div.dataset.groupId=groupId; div.dataset.groupName=groupData.group_name; div.dataset.subjectName=groupData.subject_name; div.dataset.teacherId=groupData.teacher_login_key_id||''; div.dataset.teacherName=groupData.teacher_name||''; div.dataset.remaining=remainingLessons;
-            div.innerHTML=`<div class=\"flex-grow-1\"><div class=\"unscheduled-title\">${groupData.group_name} <span class=\"badge bg-primary ms-2 remaining-badge\">${remainingLessons}</span></div><div class=\"unscheduled-meta\"><span class=\"unscheduled-subject\">${groupData.subject_name}</span>${groupData.teacher_name?`<span class=\"unscheduled-teacher\">${groupData.teacher_name}</span>`:''}</div></div><div class=\"ms-2\">${groupData.teacher_login_key_id?`<button type='button' class='btn btn-outline-info btn-sm' onclick=\"findAvailableSlots(${groupId}, '${groupData.group_name.replace(/'/g,"\\'")}', '${groupData.subject_name.replace(/'/g,"\\'")}', ${groupData.teacher_login_key_id})\" title='Rasti laisvus langelius'><i class='bi bi-search'></i></button>`:''}</div>`;
+            const roomInfo = `<span class=\"unscheduled-room\"><i class=\"bi bi-door-closed\"></i> ${groupData.room_number || '—'}</span>`;
+            div.innerHTML=`<div class=\"flex-grow-1\"><div class=\"unscheduled-title\">${groupData.group_name} <span class=\"badge bg-primary ms-2 remaining-badge\">${remainingLessons}</span></div><div class=\"unscheduled-meta\"><span class=\"unscheduled-subject\">${groupData.subject_name}</span>${groupData.teacher_name?`<span class=\"unscheduled-teacher\">${groupData.teacher_name}</span>`:''}${roomInfo}</div></div><div class=\"ms-2\">${groupData.teacher_login_key_id?`<button type='button' class='btn btn-outline-info btn-sm' onclick=\"findAvailableSlots(${groupId}, '${groupData.group_name.replace(/'/g,"\\'")}', '${groupData.subject_name.replace(/'/g,"\\'")}', ${groupData.teacher_login_key_id})\" title='Rasti laisvus langelius'><i class='bi bi-search'></i></button>`:''}</div>`;
             panel.insertBefore(div,panel.firstChild);
         }
     } else if(existing){
@@ -1455,7 +1467,11 @@ async function findAvailableSlots(groupId, groupName, subjectName, teacherId) {
             badge.innerHTML='<i class="bi bi-check-circle"></i>'; // Laisvas indikacija
             badge.title='Laisvas';
             badge.style.cursor='pointer';
-            badge.onclick=()=>showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'free', [], availableRooms, currentRoomId);
+            // Add click handler
+            badge.addEventListener('click', function(e) {
+                e.stopPropagation();
+                showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, 'free', [], availableRooms, currentRoomId);
+            });
         } else {
             const student = conf.find(c=>typeof c==='object' && c.type==='students');
             const room = conf.find(c=>typeof c==='object' && c.type==='room');
@@ -1493,11 +1509,20 @@ async function findAvailableSlots(groupId, groupName, subjectName, teacherId) {
                 badge.title='Kitas konfliktas';
             }
             badge.style.cursor='pointer';
-            badge.onclick=()=>showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, r.status, conf, availableRooms, currentRoomId);
+            // Add click handler BEFORE appending
+            const statusCopy = r.status;
+            const conflictsCopy = conf.slice();
+            badge.addEventListener('click', function(e) {
+                e.stopPropagation();
+                showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, statusCopy, conflictsCopy, availableRooms, currentRoomId);
+            });
         }
         cell.style.position='relative';
         cell.appendChild(badge);
     });
+    
+    // Setup drag-drop for newly created badges
+    setupBadgeDragDrop();
 }
 
 function showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, day, slot, status, conflicts, availableRooms, currentRoomId) {
@@ -1604,18 +1629,18 @@ function showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, d
             ${conflictsHtml}
             
             <h6 class="mt-3">Sprendimas - pasirinkite kitą kabinetą:</h6>
-            <div class="d-flex gap-2 align-items-end">
-                <div class="flex-grow-1">
-                    <select class="form-select" id="newRoomSelect">
-                        <option value="">-- Pasirinkite kabinetą --</option>
-                        ${availableRooms.map(r => '<option value="'+r.id+'" '+(r.id == currentRoomId ? 'selected' : '')+'>'+r.number+' '+(r.name || '')+'</option>').join('')}
-                    </select>
-                </div>
-                <button type="button" class="btn btn-warning" 
-                        onclick="addLessonWithNewRoom(${groupId}, ${teacherId}, '${day}', ${slot}, 'newRoomSelect'); bootstrap.Modal.getInstance(document.querySelector('.modal.show')).hide();">
-                    <i class="bi bi-plus-circle"></i> Pridėti
-                </button>
+            <div class="mb-3">
+                <select class="form-select" id="newRoomSelect">
+                    <option value="">-- Pasirinkite kabinetą --</option>
+                    ${availableRooms.map(r => '<option value="'+r.id+'" '+(r.id == currentRoomId ? 'selected' : '')+'>'+r.number+' '+(r.name || '')+'</option>').join('')}
+                </select>
             </div>
+            <div class="alert alert-info mb-3" id="roomSelectionHint">
+                <i class="bi bi-info-circle"></i> Pasirinkite kabinetą, kad patikrintume jo prieinamumą
+            </div>
+            <button type="button" class="btn btn-warning" id="addRoomButton" disabled>
+                <i class="bi bi-plus-circle"></i> Pridėti
+            </button>
         `;
     }
     
@@ -1647,7 +1672,251 @@ function showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, d
     document.body.appendChild(modal);
     const bsModal = new bootstrap.Modal(modal);
     bsModal.show();
+    
+    // Add real-time room availability checking for room conflicts
+    console.log('Modal status:', status);
+    if (status === 'room_conflict') {
+        console.log('Setting up room conflict listeners...');
+        const roomSelect = modal.querySelector('#newRoomSelect');
+        const hint = modal.querySelector('#roomSelectionHint');
+        const addBtn = modal.querySelector('#addRoomButton');
+        
+        console.log('Elements found:', {roomSelect, hint, addBtn});
+        
+        if (!roomSelect || !hint || !addBtn) {
+            console.error('Missing elements in modal!');
+            modal.addEventListener('hidden.bs.modal', () => modal.remove());
+            return;
+        }
+        
+        let selectedRoomId = null;
+        let roomAvailability = {};
+        
+        async function checkRoomAvailability(roomId) {
+            if (!roomId) return;
+            
+            console.log('Checking room availability for:', roomId);
+            
+            hint.className = 'alert alert-info mb-3';
+            hint.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Tikrinama kabineto prieinamumas...';
+            addBtn.disabled = true;
+            
+            try {
+                const resp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        group_id: groupId, 
+                        teacher_id: teacherId, 
+                        day: day, 
+                        slot: slot,
+                        check_room_id: parseInt(roomId, 10)
+                    })
+                });
+                const data = await resp.json();
+                console.log('Availability check response:', data);
+                
+                let hasRoomConflict = false;
+                if (data.conflicts && Array.isArray(data.conflicts)) {
+                    hasRoomConflict = data.conflicts.some(c => {
+                        if (typeof c === 'object' && c !== null) return c.type === 'room';
+                        if (typeof c === 'string') return c.includes('Kabinetas') || c.includes('užimtas');
+                        return false;
+                    });
+                }
+                
+                const isAvailable = !hasRoomConflict;
+                roomAvailability[roomId] = isAvailable;
+                console.log('Room available:', isAvailable);
+                
+                if (isAvailable) {
+                    hint.className = 'alert alert-success mb-3';
+                    hint.innerHTML = '<i class="bi bi-check-circle"></i> Pasirinktas kabinetas laisvas. Galite pridėti.';
+                    addBtn.disabled = false;
+                } else {
+                    hint.className = 'alert alert-danger mb-3';
+                    hint.innerHTML = '<i class="bi bi-x-circle"></i> Pasirinktas kabinetas užimtas. Pasirinkite kitą.';
+                    addBtn.disabled = true;
+                }
+            } catch (err) {
+                console.error('Error checking availability:', err);
+                hint.className = 'alert alert-secondary mb-3';
+                hint.innerHTML = '<i class="bi bi-question-circle"></i> Nepavyko patikrinti. Bandykite dar kartą.';
+                roomAvailability[roomId] = false;
+                addBtn.disabled = true;
+            }
+        }
+        
+        roomSelect.addEventListener('change', async (e) => {
+            console.log('Room select changed:', e.target.value);
+            selectedRoomId = e.target.value ? parseInt(e.target.value) : null;
+            
+            if (!selectedRoomId) {
+                hint.className = 'alert alert-info mb-3';
+                hint.innerHTML = '<i class="bi bi-info-circle"></i> Pasirinkite kabinetą, kad patikrintume jo prieinamumą';
+                addBtn.disabled = true;
+                return;
+            }
+            
+            await checkRoomAvailability(selectedRoomId);
+        });
+        
+        addBtn.addEventListener('click', async () => {
+            console.log('Add button clicked, selectedRoomId:', selectedRoomId, 'available:', roomAvailability[selectedRoomId]);
+            if (!selectedRoomId || roomAvailability[selectedRoomId] !== true) return;
+            
+            // Close current modal
+            bsModal.hide();
+            
+            // Open new modal for group copy creation
+            showGroupCopyModal(groupId, groupName, subjectName, teacherId, day, slot, selectedRoomId);
+        });
+    }
+    
     modal.addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
+function showGroupCopyModal(groupId, groupName, subjectName, teacherId, day, slot, newRoomId) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.tabIndex = -1;
+    
+    // Fetch group info to get remaining lessons
+    fetch(`{{ url('/admin/schools/' . $school->id . '/timetables/' . $timetable->id) }}/group-info/${groupId}`)
+        .then(r => r.json())
+        .then(groupInfo => {
+            const remainingLessons = groupInfo.remaining_lessons || 1;
+            const totalLessons = groupInfo.lessons_per_week || remainingLessons;
+            
+            modal.innerHTML = `
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header bg-primary text-white">
+                            <h5 class="modal-title"><i class="bi bi-copy"></i> Sukurti grupės kopiją</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-info mb-3">
+                                <i class="bi bi-info-circle"></i> Bus sukurta nauja grupė su pasirinktu kabinetu vienai pamokai. 
+                                Originalios grupės pamokų skaičius bus sumažintas.
+                            </div>
+                            
+                            <p><strong>Originali grupė:</strong> ${groupName}</p>
+                            <p><strong>Dalykas:</strong> ${subjectName}</p>
+                            <p><strong>Originalios grupės pamokos per savaitę:</strong> ${totalLessons}</p>
+                            <p><strong>Nesuplanuotos pamokos:</strong> ${remainingLessons}</p>
+                            
+                            <hr>
+                            
+                            <div class="mb-3">
+                                <label class="form-label"><strong>Naujos grupės pavadinimas:</strong></label>
+                                <input type="text" class="form-control" id="newGroupName" value="${groupName}">
+                                <small class="text-muted">Galite palikti tą patį pavadinimą arba pakeisti</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label"><strong>Naujos grupės pamokų kiekis per savaitę:</strong></label>
+                                <input type="number" class="form-control" id="newGroupLessons" value="1" min="1" max="${remainingLessons}">
+                                <small class="text-muted">Maks: ${remainingLessons} (nesuplanuotų pamokų)</small>
+                            </div>
+                            
+                            <div class="alert alert-warning mb-0">
+                                <strong>Veiksmai:</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li>Sukuriama nauja grupė su pamokų kiekiu: <span id="previewNewLessons">1</span></li>
+                                    <li>Originalios grupės pamokos sumažinamos iki: <span id="previewOriginalLessons">${totalLessons - 1}</span></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                            <button type="button" class="btn btn-primary" id="confirmCreateCopy">
+                                <i class="bi bi-check-circle"></i> Sukurti kopiją ir pridėti pamoką
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            
+            document.body.appendChild(modal);
+            const copyModal = new bootstrap.Modal(modal);
+            copyModal.show();
+            
+            const newGroupLessonsInput = modal.querySelector('#newGroupLessons');
+            const previewNewLessons = modal.querySelector('#previewNewLessons');
+            const previewOriginalLessons = modal.querySelector('#previewOriginalLessons');
+            const confirmBtn = modal.querySelector('#confirmCreateCopy');
+            
+            // Update preview when lessons change
+            newGroupLessonsInput.addEventListener('input', () => {
+                const newLessons = parseInt(newGroupLessonsInput.value) || 1;
+                previewNewLessons.textContent = newLessons;
+                previewOriginalLessons.textContent = totalLessons - newLessons;
+            });
+            
+            confirmBtn.addEventListener('click', async () => {
+                const newGroupNameVal = modal.querySelector('#newGroupName').value.trim();
+                const newLessonsCount = parseInt(newGroupLessonsInput.value) || 1;
+                
+                if (!newGroupNameVal) {
+                    alert('Įveskite grupės pavadinimą');
+                    return;
+                }
+                
+                if (newLessonsCount < 1 || newLessonsCount > remainingLessons) {
+                    alert(`Pamokų kiekis turi būti nuo 1 iki ${remainingLessons}`);
+                    return;
+                }
+                
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Kuriama...';
+                
+                try {
+                    const resp = await fetch(`{{ route('schools.timetables.manual-slot-alt-room', [$school, $timetable]) }}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            group_id: groupId,
+                            teacher_id: teacherId,
+                            day: day,
+                            slot: slot,
+                            alternative_room_id: newRoomId,
+                            new_group_name: newGroupNameVal,
+                            new_group_lessons: newLessonsCount
+                        })
+                    });
+                    
+                    const data = await resp.json();
+                    
+                    if (!resp.ok || !data.success) {
+                        alert(data.error || 'Nepavyko sukurti kopijos');
+                        confirmBtn.disabled = false;
+                        confirmBtn.innerHTML = '<i class="bi bi-check-circle"></i> Sukurti kopiją ir pridėti pamoką';
+                        return;
+                    }
+                    
+                    copyModal.hide();
+                    location.reload(); // Reload to show updated timetable
+                } catch (err) {
+                    alert('Klaida siunčiant užklausą');
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '<i class="bi bi-check-circle"></i> Sukurti kopiją ir pridėti pamoką';
+                }
+            });
+            
+            modal.addEventListener('hidden.bs.modal', () => modal.remove());
+        })
+        .catch(err => {
+            console.error('Error fetching group info:', err);
+            alert('Nepavyko gauti grupės informacijos');
+        });
 }
 
 async function addLessonToSlot(groupId, teacherId, day, slot, tempRoomId) {
@@ -2005,6 +2274,9 @@ tbody .sticky-col-name {
 .unscheduled-title { font-weight:600; color:#212529; }
 .unscheduled-meta { font-size:0.85rem; color:#6c757d; display:flex; gap:8px; align-items:baseline; }
 .unscheduled-subject { color:#198754; font-weight:500; }
+.unscheduled-teacher::before { content:'•'; margin:0 4px; }
+.unscheduled-room { color:#0d6efd; }
+.unscheduled-room::before { content:'•'; margin:0 4px; }
 .drop-target {
     transition: background-color 0.2s;
 }

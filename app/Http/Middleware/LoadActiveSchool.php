@@ -23,9 +23,14 @@ class LoadActiveSchool
         $activeSchoolId = session('active_school_id');
         
         if (!$activeSchoolId) {
-            // If no active school, redirect to dashboard with message
-            return redirect()->route('dashboard')
-                ->with('error', 'Prašome pasirinkti mokyklą.');
+            // Allow access to activation routes without active school
+            if ($request->routeIs('activation.*')) {
+                return $next($request);
+            }
+            
+            // If no active school, redirect to activation page
+            return redirect()->route('activation.index')
+                ->with('info', 'Prašome aktyvuoti įstaigą.');
         }
 
         // Load the school
@@ -34,13 +39,14 @@ class LoadActiveSchool
         if (!$school) {
             // School not found, clear session and redirect
             session()->forget('active_school_id');
-            return redirect()->route('dashboard')
+            return redirect()->route('activation.index')
                 ->with('error', 'Mokykla nerasta.');
         }
 
         // Check permissions
-        if (!$user->isSupervisor() && !$user->isSchoolAdmin($school->id)) {
-            return redirect()->route('dashboard')
+        if (!$user->isSupervisor() && !$user->isSchoolAdmin($school->id) && !$user->schools()->where('school_id', $school->id)->exists()) {
+            session()->forget('active_school_id');
+            return redirect()->route('activation.index')
                 ->with('error', 'Neturite prieigos prie šios mokyklos.');
         }
 

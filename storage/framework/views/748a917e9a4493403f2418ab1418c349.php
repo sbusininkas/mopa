@@ -38,4 +38,4 @@
         <p class="mb-0 mt-2 small">Jūs neturite priskirtos rolės. Susisiekite su administratoriumi.</p>
     </div>
 <?php endif; ?>
-<?php /**PATH C:\Users\herom\Desktop\Projektai\mopa\resources\views/partials/sidebar.blade.php ENDPATH**/ ?>
+<?php /**PATH C:\xampp\htdocs\mopa\resources\views/partials/sidebar.blade.php ENDPATH**/ ?>

@@ -156,6 +156,8 @@ class TimetableController extends Controller
                 if (($u['remaining_lessons'] ?? 0) > 0) { $unscheduled[] = $u; }
             }
         }
+        // Fix remaining_lessons accounting for group copies
+        $unscheduled = $this->fixUnscheduledRemainingLessons($timetable, $unscheduled);
 
         return view('admin.timetables.teachers-view', [
             'school' => $school,
@@ -233,6 +235,8 @@ class TimetableController extends Controller
                 }
             }
         }
+        // Fix remaining_lessons accounting for group copies
+        $unscheduled = $this->fixUnscheduledRemainingLessons($timetable, $unscheduled);
 
         return view('admin.timetables.teacher-view', [
             'school' => $school,
@@ -255,6 +259,8 @@ class TimetableController extends Controller
                 if (($u['remaining_lessons'] ?? 0) > 0) { $unscheduled[] = $u; }
             }
         }
+        // Fix remaining_lessons accounting for group copies
+        $unscheduled = $this->fixUnscheduledRemainingLessons($timetable, $unscheduled);
         return response()->json(['data' => $unscheduled]);
     }
 
@@ -272,22 +278,38 @@ class TimetableController extends Controller
         if (!$group->teacherLoginKey || $group->teacherLoginKey->id != $validated['teacher_id']) {
             return response()->json(['error' => 'Grupės mokytojas nesutampa su eilute'], 422);
         }
-        // Check already scheduled lessons count
-        $scheduledCount = $timetable->slots()->where('timetable_group_id', $group->id)->count();
-        $needed = max(1,(int)($group->lessons_per_week ?? 1));
-        if ($scheduledCount >= $needed) {
-            return response()->json(['error' => 'Šiai grupei jau suplanuotos visos pamokos'], 422);
+        // Check already scheduled lessons count - account for group copies
+        $relatedGroupIds = $group->getAllRelatedGroupIds();
+        $scheduledCount = $timetable->slots()
+            ->whereIn('timetable_group_id', $relatedGroupIds)
+            ->count();
+        
+        // Calculate total needed lessons from ALL related groups (original + copies)
+        $relatedGroups = $timetable->groups()->whereIn('id', $relatedGroupIds)->get();
+        $totalNeeded = $relatedGroups->sum('lessons_per_week');
+        
+        if ($scheduledCount >= $totalNeeded) {
+            return response()->json(['error' => 'Šiai grupei (ir jos kopijoms) jau suplanuotos visos pamokos'], 422);
         }
         $day = $validated['day'];
         $slot = (int)$validated['slot'];
         // Conflict checks (teacher, room, students per same day+slot)
+        // CRITICAL: Only check slots that are actually scheduled - not all groups
         $existing = $timetable->slots()->where('day',$day)->where('slot',$slot)->with(['group.teacherLoginKey','group.room','group.students','group.subject'])->get();
         foreach ($existing as $ex) {
             $eg = $ex->group;
-            if ($eg && $eg->teacher_login_key_id === $group->teacher_login_key_id) {
+            if (!$eg) continue;
+            
+            // Skip self-check - only check OTHER groups
+            if ($eg->id === $group->id) continue;
+            
+            // Teacher conflict with ANOTHER group
+            if ($eg->teacher_login_key_id === $group->teacher_login_key_id) {
                 return response()->json(['error' => 'Mokytojas tuo laiku užimtas'], 422);
             }
-            if ($eg && $group->room_id && $eg->room_id === $group->room_id) {
+            
+            // Room conflict with ANOTHER group
+            if ($group->room_id && $eg->room_id === $group->room_id) {
                 $roomName = $group->room ? ($group->room->number . ' ' . $group->room->name) : 'Kabinetas';
                 $occupantGroup = $eg->name ?? 'kita grupė';
                 $occupantTeacher = $eg->teacherLoginKey?->full_name ?? 'nežinomas mokytojas';
@@ -370,11 +392,15 @@ class TimetableController extends Controller
             'day' => $day,
             'slot' => $slot,
         ]);
-        // Update generation_report (decrement remaining)
+        // Update generation_report (decrement remaining) - account for copies
         $report = $timetable->generation_report ?? [];
         if (isset($report['unscheduled'])) {
+            // Get all related group IDs
+            $relatedGroupIds = $group->getAllRelatedGroupIds();
+            
+            // Update remaining_lessons for all related groups
             foreach ($report['unscheduled'] as &$u) {
-                if (($u['group_id'] ?? null) == $group->id && ($u['remaining_lessons'] ?? 0) > 0) {
+                if (in_array($u['group_id'] ?? null, $relatedGroupIds) && ($u['remaining_lessons'] ?? 0) > 0) {
                     $u['remaining_lessons'] = max(0, $u['remaining_lessons'] - 1);
                 }
             }
@@ -391,9 +417,16 @@ class TimetableController extends Controller
             $timetable->update(['generation_report' => $report]);
         }
         
-        // Calculate remaining lessons for this group
-        $scheduledCount = $timetable->slots()->where('timetable_group_id', $group->id)->count();
-        $remainingLessons = max(0, ($group->lessons_per_week ?? 0) - $scheduledCount);
+        // Calculate remaining lessons for this group - account for copies
+        $relatedGroupIds = $group->getAllRelatedGroupIds();
+        $scheduledCount = $timetable->slots()
+            ->whereIn('timetable_group_id', $relatedGroupIds)
+            ->count();
+        
+        // Calculate total needed lessons from ALL related groups (original + copies)
+        $relatedGroups = $timetable->groups()->whereIn('id', $relatedGroupIds)->get();
+        $totalLessons = $relatedGroups->sum('lessons_per_week');
+        $remainingLessons = max(0, $totalLessons - $scheduledCount);
         
         return response()->json([
             'success' => true,
@@ -413,6 +446,8 @@ class TimetableController extends Controller
                 'subject_name' => $group->subject?->name,
                 'teacher_login_key_id' => $group->teacher_login_key_id,
                 'teacher_name' => $group->teacherLoginKey?->full_name,
+                'room_number' => $group->room?->number,
+                'room_name' => $group->room?->name,
             ],
         ]);
     }
@@ -427,6 +462,8 @@ class TimetableController extends Controller
             'slot' => 'required|integer|min:1',
             'teacher_id' => 'required|integer',
             'alternative_room_id' => 'required|integer',
+            'new_group_name' => 'nullable|string|max:255',
+            'new_group_lessons' => 'nullable|integer|min:1',
         ]);
         
         // Get original group
@@ -458,21 +495,46 @@ class TimetableController extends Controller
             return response()->json(['error' => 'Pasirinktas kabinetas tuo metu užimtas'], 422);
         }
         
-        // Create new group with alternative room and reduced lesson count
-        $scheduledCount = $timetable->slots()->where('timetable_group_id', $originalGroup->id)->count();
-        $remainingOriginal = max(0, ($originalGroup->lessons_per_week ?? 0) - $scheduledCount);
+        // Calculate lessons - account for all copies
+        $relatedGroupIds = $originalGroup->getAllRelatedGroupIds();
+        $scheduledCount = $timetable->slots()
+            ->whereIn('timetable_group_id', $relatedGroupIds)
+            ->count();
         
-        if ($remainingOriginal <= 0) {
-            return response()->json(['error' => 'Originaliai grupei neliko neplanuojamų pamokų'], 422);
+        // Get the true original group (in case $originalGroup is already a copy)
+        $trueOriginalGroup = $originalGroup;
+        $copyRelation = \App\Models\TimetableGroupCopy::where('copy_group_id', $originalGroup->id)->first();
+        if ($copyRelation) {
+            $trueOriginalGroup = $timetable->groups()->find($copyRelation->original_group_id);
         }
         
+        // Calculate total needed lessons from ALL related groups (original + copies)
+        $relatedGroups = $timetable->groups()->whereIn('id', $relatedGroupIds)->get();
+        $totalLessons = $relatedGroups->sum('lessons_per_week');
+        $remainingOriginal = max(0, $totalLessons - $scheduledCount);
+        
+        if ($remainingOriginal <= 0) {
+            return response()->json(['error' => 'Originaliai grupei (su kopijomis) neliko neplanuojamų pamokų'], 422);
+        }
+        
+        // Use provided values or defaults
+        $newGroupLessons = $validated['new_group_lessons'] ?? 1;
+        $newGroupName = $validated['new_group_name'] ?? $originalGroup->name;
+        
+        // If requested lessons exceed remaining, cap it at remaining
+        // We'll only insert 1 lesson now, rest will remain unscheduled with new room
+        if ($newGroupLessons > $remainingOriginal) {
+            $newGroupLessons = $remainingOriginal;
+        }
+        
+        // Create new group with alternative room
         $newGroup = $timetable->groups()->create([
-            'name' => $originalGroup->name,
+            'name' => $newGroupName,
             'subject_id' => $originalGroup->subject_id,
             'teacher_login_key_id' => $originalGroup->teacher_login_key_id,
             'room_id' => $newRoom->id,
             'week_type' => $originalGroup->week_type,
-            'lessons_per_week' => 1, // Only one lesson for this slot
+            'lessons_per_week' => $newGroupLessons,
             'is_priority' => $originalGroup->is_priority,
         ]);
         
@@ -480,8 +542,15 @@ class TimetableController extends Controller
         $studentIds = $originalGroup->students()->pluck('login_keys.id')->toArray();
         $newGroup->students()->sync($studentIds);
         
+        // Reduce original group's lessons_per_week
+        $originalGroup->update([
+            'lessons_per_week' => $originalGroup->lessons_per_week - $newGroupLessons
+        ]);
+        
         // Perform all the same conflict checks as storeManualSlot
         if (!$newGroup->teacherLoginKey || $newGroup->teacherLoginKey->id != $validated['teacher_id']) {
+            // Restore original group lessons
+            $originalGroup->update(['lessons_per_week' => $originalGroup->lessons_per_week + $newGroupLessons]);
             $newGroup->delete();
             return response()->json(['error' => 'Grupės mokytojas nesutampa su eilute'], 422);
         }
@@ -491,6 +560,7 @@ class TimetableController extends Controller
         foreach ($existing as $ex) {
             $eg = $ex->group;
             if ($eg && $eg->teacher_login_key_id === $newGroup->teacher_login_key_id) {
+                $originalGroup->update(['lessons_per_week' => $originalGroup->lessons_per_week + $newGroupLessons]);
                 $newGroup->delete();
                 return response()->json(['error' => 'Mokytojas tuo laiku užimtas'], 422);
             }
@@ -505,6 +575,7 @@ class TimetableController extends Controller
                     }
                 }
                 if (!empty($conflictingStudents)) {
+                    $originalGroup->update(['lessons_per_week' => $originalGroup->lessons_per_week + $newGroupLessons]);
                     $newGroup->delete();
                     return response()->json([
                         'error' => 'Užimti mokiniai: ' . implode(', ', $conflictingStudents)
@@ -517,6 +588,7 @@ class TimetableController extends Controller
         $sameDayCount = $timetable->slots()->where('timetable_group_id',$newGroup->id)->where('day',$day)->count();
         $maxSame = $timetable->max_same_subject_per_day ?? 2;
         if ($sameDayCount >= $maxSame) {
+            $originalGroup->update(['lessons_per_week' => $originalGroup->lessons_per_week + $newGroupLessons]);
             $newGroup->delete();
             return response()->json(['error' => 'Viršytas pamokų skaičius tos pačios disciplinos tą dieną'], 422);
         }
@@ -528,16 +600,22 @@ class TimetableController extends Controller
             'slot' => $slot,
         ]);
         
-        // Reduce lessons_per_week for original group
-        $originalGroup->update([
-            'lessons_per_week' => max(0, ($originalGroup->lessons_per_week ?? 0) - 1)
+        // Create relationship record between original and copy
+        // Make sure we link to the TRUE original group
+        \App\Models\TimetableGroupCopy::create([
+            'original_group_id' => $trueOriginalGroup->id,
+            'copy_group_id' => $newGroup->id,
         ]);
         
-        // Update generation_report for original group
+        // Update generation_report (decrement remaining) - account for copies
         $report = $timetable->generation_report ?? [];
         if (isset($report['unscheduled'])) {
+            // Get all related group IDs (original + all copies)
+            $allRelatedIds = $trueOriginalGroup->getAllRelatedGroupIds();
+            
+            // Update remaining_lessons for all related groups
             foreach ($report['unscheduled'] as &$u) {
-                if (($u['group_id'] ?? null) == $originalGroup->id && ($u['remaining_lessons'] ?? 0) > 0) {
+                if (in_array($u['group_id'] ?? null, $allRelatedIds) && ($u['remaining_lessons'] ?? 0) > 0) {
                     $u['remaining_lessons'] = max(0, $u['remaining_lessons'] - 1);
                 }
             }
@@ -555,30 +633,112 @@ class TimetableController extends Controller
             $timetable->update(['generation_report' => $report]);
         }
         
-        // Calculate remaining for original group
-        $scheduledCountAfter = $timetable->slots()->where('timetable_group_id', $originalGroup->id)->count();
-        $remainingLessons = max(0, ($originalGroup->lessons_per_week ?? 0) - $scheduledCountAfter);
-        
+        // Return success with updated data
         return response()->json([
             'success' => true,
-            'html' => [
-                'group' => $newGroup->name,
-                'subject' => $newGroup->subject?->name,
-                'room' => $newRoom->number . ' ' . $newRoom->name,
-                'slot_id' => $slotModel->id,
-                'teacher_id' => $newGroup->teacherLoginKey?->id,
-                'teacher_name' => $newGroup->teacherLoginKey?->full_name,
-            ],
-            'group_id' => $originalGroup->id, // Return original group ID for frontend update
-            'remaining_lessons' => $remainingLessons,
-            'group_data' => [
-                'group_id' => $originalGroup->id,
-                'group_name' => $originalGroup->name,
-                'subject_name' => $originalGroup->subject?->name,
-                'teacher_login_key_id' => $originalGroup->teacher_login_key_id,
-                'teacher_name' => $originalGroup->teacherLoginKey?->full_name,
-            ],
+            'message' => 'Grupės kopija sėkmingai sukurta ir pamoka pridėta',
+            'new_group_id' => $newGroup->id,
+            'original_group_id' => $trueOriginalGroup->id,
         ]);
+    }
+
+    public function getGroupInfo(School $school, Timetable $timetable, $groupId)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $group = $timetable->groups()->with(['subject','teacherLoginKey','students','room'])->find($groupId);
+        if (!$group) {
+            return response()->json(['error' => 'Grupė nerasta'], 404);
+        }
+        
+        // Get all related group IDs (original + copies)
+        $relatedGroupIds = $group->getAllRelatedGroupIds();
+        
+        // Count scheduled lessons for all related groups
+        $scheduledCount = $timetable->slots()
+            ->whereIn('timetable_group_id', $relatedGroupIds)
+            ->count();
+        
+        // Total lessons should be from the original group's lessons_per_week
+        // Find the original group
+        $originalGroup = $group;
+        $copyRelation = \App\Models\TimetableGroupCopy::where('copy_group_id', $group->id)->first();
+        if ($copyRelation) {
+            $originalGroup = $timetable->groups()->find($copyRelation->original_group_id);
+        }
+        
+        $totalLessons = $originalGroup->lessons_per_week ?? 0;
+        $remainingLessons = max(0, $totalLessons - $scheduledCount);
+        
+        return response()->json([
+            'group_id' => $group->id,
+            'name' => $group->name,
+            'subject_name' => $group->subject?->name,
+            'teacher_name' => $group->teacherLoginKey?->full_name,
+            'teacher_login_key_id' => $group->teacher_login_key_id,
+            'room_number' => $group->room?->number,
+            'room_name' => $group->room?->name,
+            'lessons_per_week' => $group->lessons_per_week,
+            'scheduled_count' => $scheduledCount,
+            'remaining_lessons' => $remainingLessons,
+        ]);
+    }
+
+    /**
+     * Fix remaining_lessons for unscheduled groups by accounting for group copies
+     */
+    private function fixUnscheduledRemainingLessons(Timetable $timetable, array $unscheduled): array
+    {
+        $fixed = [];
+        
+        foreach ($unscheduled as $entry) {
+            $groupId = $entry['group_id'] ?? null;
+            if (!$groupId) {
+                $fixed[] = $entry;
+                continue;
+            }
+            
+            $group = $timetable->groups()->find($groupId);
+            if (!$group) {
+                $fixed[] = $entry;
+                continue;
+            }
+            
+            // Get all related group IDs (original + copies)
+            $relatedGroupIds = $group->getAllRelatedGroupIds();
+            
+            // Count scheduled lessons for all related groups
+            $scheduledCount = $timetable->slots()
+                ->whereIn('timetable_group_id', $relatedGroupIds)
+                ->count();
+            
+            // Total lessons should be from the original group's lessons_per_week
+            // Find the original group
+            $originalGroup = $group;
+            $copyRelation = \App\Models\TimetableGroupCopy::where('copy_group_id', $group->id)->first();
+            if ($copyRelation) {
+                $originalGroup = $timetable->groups()->find($copyRelation->original_group_id);
+            }
+            
+            $totalLessons = $originalGroup ? ($originalGroup->lessons_per_week ?? 0) : ($group->lessons_per_week ?? 0);
+            $remainingLessons = max(0, $totalLessons - $scheduledCount);
+            
+            // Only include if there are remaining lessons
+            if ($remainingLessons > 0) {
+                $entry['remaining_lessons'] = $remainingLessons;
+                
+                // Ensure room information is included
+                if (!isset($entry['room_number']) || !isset($entry['room_name'])) {
+                    $entry['room_id'] = $group->room_id;
+                    $entry['room_number'] = $group->room?->number;
+                    $entry['room_name'] = $group->room?->name;
+                }
+                
+                $fixed[] = $entry;
+            }
+        }
+        
+        return $fixed;
     }
 
     public function moveSlot(Request $request, School $school, Timetable $timetable)
@@ -805,14 +965,17 @@ class TimetableController extends Controller
         // Delete the slot
         $slotModel->delete();
         
-        // Update generation_report (increment unscheduled count)
+        // Update generation_report (increment unscheduled count) - account for copies
         $report = $timetable->generation_report ?? [];
         
-        // Check if group already exists in unscheduled array
+        // Get all related group IDs
+        $relatedGroupIds = $group->getAllRelatedGroupIds();
+        
+        // Check if any related group already exists in unscheduled array
         $found = false;
         if (isset($report['unscheduled'])) {
             foreach ($report['unscheduled'] as &$u) {
-                if (($u['group_id'] ?? null) == $group->id) {
+                if (in_array($u['group_id'] ?? null, $relatedGroupIds)) {
                     $u['remaining_lessons'] = ($u['remaining_lessons'] ?? 0) + 1;
                     $found = true;
                     break;
@@ -823,16 +986,23 @@ class TimetableController extends Controller
             $report['unscheduled'] = [];
         }
         
-        // If group not found in unscheduled, add it
+        // If no related group found in unscheduled, add the original group
         if (!$found) {
+            // Find the original group
+            $originalGroup = $group;
+            $copyRelation = \App\Models\TimetableGroupCopy::where('copy_group_id', $group->id)->first();
+            if ($copyRelation) {
+                $originalGroup = $timetable->groups()->find($copyRelation->original_group_id);
+            }
+            
             $report['unscheduled'][] = [
-                'group_id' => $group->id,
-                'group_name' => $group->name,
-                'subject_name' => $group->subject?->name,
-                'teacher_name' => $group->teacherLoginKey?->full_name,
-                'teacher_login_key_id' => $group->teacher_login_key_id,
-                'room_number' => $group->room?->number,
-                'room_name' => $group->room?->name,
+                'group_id' => $originalGroup->id,
+                'group_name' => $originalGroup->name,
+                'subject_name' => $originalGroup->subject?->name,
+                'teacher_name' => $originalGroup->teacherLoginKey?->full_name,
+                'teacher_login_key_id' => $originalGroup->teacher_login_key_id,
+                'room_number' => $originalGroup->room?->number,
+                'room_name' => $originalGroup->room?->name,
                 'remaining_lessons' => 1,
                 'reason' => 'Perkelta atgal rankiniu būdu',
             ];
@@ -862,10 +1032,13 @@ class TimetableController extends Controller
             'group_id' => $group->id,
             'remaining_lessons' => $remainingLessons,
             'group_data' => [
+                'group_id' => $group->id,
                 'group_name' => $group->name,
                 'subject_name' => $group->subject?->name ?? '',
                 'teacher_login_key_id' => $group->teacher_login_key_id,
                 'teacher_name' => $group->teacherLoginKey?->full_name ?? '',
+                'room_number' => $group->room?->number,
+                'room_name' => $group->room?->name,
             ],
         ]);
     }
@@ -916,14 +1089,23 @@ class TimetableController extends Controller
             ]);
         }
         
-        // Check already scheduled lessons count
-        $scheduledCount = $timetable->slots()->where('timetable_group_id', $group->id)->count();
-        $needed = max(1,(int)($group->lessons_per_week ?? 1));
-        if ($scheduledCount >= $needed) {
-            $conflicts[] = 'Šiai grupei jau suplanuotos visos pamokos';
+        // Check already scheduled lessons count - account for group copies
+        $relatedGroupIds = $group->getAllRelatedGroupIds();
+        $scheduledCount = $timetable->slots()
+            ->whereIn('timetable_group_id', $relatedGroupIds)
+            ->count();
+        
+        // Calculate total needed lessons from ALL related groups (original + copies)
+        $relatedGroups = $timetable->groups()->whereIn('id', $relatedGroupIds)->get();
+        $totalNeeded = $relatedGroups->sum('lessons_per_week');
+        
+        if ($scheduledCount >= $totalNeeded) {
+            $conflicts[] = 'Šiai grupei (ir jos kopijoms) jau suplanuotos visos pamokos';
         }
         
         // Conflict checks (teacher, room, students per same day+slot)
+        // CRITICAL: Only check slots that are actually scheduled at this day+slot
+        // This prevents false conflicts from groups that exist but don't have a lesson at this time
         $existing = $timetable->slots()->where('day',$day)->where('slot',$slot)->with(['group.teacherLoginKey','group.room','group.students','group.subject'])->get();
         
         $teacherConflict = false;
@@ -935,13 +1117,15 @@ class TimetableController extends Controller
             $eg = $ex->group;
             if (!$eg) continue;
             
-            // Teacher conflict
-            if ($eg->teacher_login_key_id === $group->teacher_login_key_id) {
+            // Teacher conflict - check if ANOTHER group with this teacher has a lesson here
+            if ($eg->teacher_login_key_id === $group->teacher_login_key_id && $eg->id !== $group->id) {
                 $teacherConflict = true;
             }
             
-            // Room conflict
-            if ($checkRoomId && $eg->room_id === $checkRoomId) {
+            // Room conflict - check if ANOTHER group with this room has a lesson here
+            // This is the key fix: we only find conflicts if there's an actual scheduled slot
+            // Because we're querying through slots(), we only get groups that are actually scheduled at this time
+            if ($checkRoomId && $eg->room_id === $checkRoomId && $eg->id !== $group->id) {
                 $roomConflict = true;
                 if ($roomConflictDetails === null) {
                     $roomConflictDetails = [
@@ -952,15 +1136,17 @@ class TimetableController extends Controller
                 }
             }
             
-            // Student conflicts
-            $studentIds = $group->students->pluck('id')->toArray();
-            foreach ($eg->students as $st) {
-                if (in_array($st->id, $studentIds)) {
-                    $studentConflicts[] = [
-                        'name' => $st->full_name ?? "ID: {$st->id}",
-                        'group' => $eg->name ?? 'nežinoma grupė',
-                        'subject' => $eg->subject?->name ?? '—',
-                    ];
+            // Student conflicts - only with OTHER groups (not self)
+            if ($eg->id !== $group->id) {
+                $studentIds = $group->students->pluck('id')->toArray();
+                foreach ($eg->students as $st) {
+                    if (in_array($st->id, $studentIds)) {
+                        $studentConflicts[] = [
+                            'name' => $st->full_name ?? "ID: {$st->id}",
+                            'group' => $eg->name ?? 'nežinoma grupė',
+                            'subject' => $eg->subject?->name ?? '—',
+                        ];
+                    }
                 }
             }
         }
@@ -1032,11 +1218,67 @@ class TimetableController extends Controller
         }, $conflicts);
         $message = $hasConflicts ? implode('; ', $messageArray) : 'Konfliktų nerasta';
         
-        return response()->json([
+        // Determine conflict type
+        $conflictType = null;
+        $hasTeacherConflict = count(array_filter($conflicts, function($c) { 
+            return is_string($c) && strpos($c, 'Mokytojas') !== false; 
+        })) > 0;
+        $hasRoomConflict = count(array_filter($conflicts, function($c) { 
+            return is_array($c) && ($c['type'] ?? null) === 'room'; 
+        })) > 0;
+        $hasStudentConflict = count(array_filter($conflicts, function($c) { 
+            return is_array($c) && ($c['type'] ?? null) === 'students'; 
+        })) > 0;
+        
+        if ($hasTeacherConflict) {
+            $conflictType = 'teacher';
+        } elseif ($hasStudentConflict && $hasRoomConflict) {
+            $conflictType = 'both_conflicts';
+        } elseif ($hasStudentConflict) {
+            $conflictType = 'students';
+        } elseif ($hasRoomConflict) {
+            $conflictType = 'room';
+        }
+        
+        $response = [
             'hasConflicts' => $hasConflicts,
             'conflicts' => $conflicts,
             'message' => $message,
-        ]);
+            'conflict_type' => $conflictType,
+        ];
+        
+        // If it's only a room conflict, provide available rooms and current room info
+        if ($conflictType === 'room') {
+            $school = $timetable->school;
+            $allRooms = $school->rooms()->orderBy('number')->get();
+            
+            $response['current_room'] = $group->room ? [
+                'id' => $group->room->id,
+                'number' => $group->room->number,
+                'name' => $group->room->name
+            ] : ['id' => null, 'number' => '?', 'name' => ''];
+            
+            $response['available_rooms'] = $allRooms->map(function($room) {
+                return [
+                    'id' => $room->id,
+                    'number' => $room->number,
+                    'name' => $room->name,
+                    'label' => $room->number . ' ' . $room->name
+                ];
+            })->toArray();
+            
+            $response['group'] = [
+                'id' => $group->id,
+                'name' => $group->name,
+                'subject_name' => $group->subject?->name,
+                'subject_id' => $group->subject_id,
+                'teacher_login_key_id' => $group->teacher_login_key_id
+            ];
+            
+            $response['error'] = $message;
+        }
+        
+        return response()->json($response);
     }
 
     public function bulkCheckConflicts(Request $request, School $school, Timetable $timetable)
@@ -1265,20 +1507,66 @@ class TimetableController extends Controller
             'name' => $timetable->name . ' (kopija)',
             'is_public' => false,
             'copied_from_id' => $timetable->id,
+            'max_same_subject_per_day' => $timetable->max_same_subject_per_day,
+            'generation_report' => $timetable->generation_report,
         ]);
 
-        // copy groups
+        // Map to track old group IDs to new group IDs for copy relationships
+        $groupMapping = [];
+
+        // Copy all groups with ALL their properties
         foreach ($timetable->groups as $group) {
             $newGroup = $copy->groups()->create([
                 'name' => $group->name,
                 'subject_id' => $group->subject_id,
                 'teacher_login_key_id' => $group->teacher_login_key_id,
+                'room_id' => $group->room_id,
+                'week_type' => $group->week_type,
+                'lessons_per_week' => $group->lessons_per_week,
+                'is_priority' => $group->is_priority,
             ]);
-            // do not copy students by default
+            
+            // Copy students
+            if ($group->students()->count() > 0) {
+                $studentIds = $group->students()->pluck('login_keys.id')->toArray();
+                $newGroup->students()->sync($studentIds);
+            }
+            
+            // Map old group ID to new group ID
+            $groupMapping[$group->id] = $newGroup->id;
+        }
+
+        // Copy all slots
+        foreach ($timetable->slots as $slot) {
+            $newGroupId = $groupMapping[$slot->timetable_group_id] ?? null;
+            if ($newGroupId) {
+                $copy->slots()->create([
+                    'timetable_group_id' => $newGroupId,
+                    'day' => $slot->day,
+                    'slot' => $slot->slot,
+                ]);
+            }
+        }
+
+        // Copy group copy relationships (original -> copy mappings)
+        foreach ($timetable->groups as $group) {
+            // Get copies of this group (where this is the original)
+            $copies = \App\Models\TimetableGroupCopy::where('original_group_id', $group->id)->get();
+            foreach ($copies as $copyRelation) {
+                $newOriginalId = $groupMapping[$copyRelation->original_group_id] ?? null;
+                $newCopyId = $groupMapping[$copyRelation->copy_group_id] ?? null;
+                
+                if ($newOriginalId && $newCopyId) {
+                    \App\Models\TimetableGroupCopy::create([
+                        'original_group_id' => $newOriginalId,
+                        'copy_group_id' => $newCopyId,
+                    ]);
+                }
+            }
         }
 
         return redirect()->route('schools.timetables.show', [$school, $copy])
-            ->with('success', 'Tvarkaraštis nukopijuotas');
+            ->with('success', 'Tvarkaraštis nukopijuotas su visais duomenimis');
     }
 
     public function destroy(School $school, Timetable $timetable)

@@ -49,4 +49,37 @@ class TimetableGroup extends Model
     {
         return $this->belongsToMany(LoginKey::class, 'timetable_group_student', 'timetable_group_id', 'login_key_id');
     }
+
+    // Group copies relationships
+    public function copies()
+    {
+        return $this->hasMany(TimetableGroupCopy::class, 'original_group_id');
+    }
+
+    public function originalOf()
+    {
+        return $this->hasMany(TimetableGroupCopy::class, 'copy_group_id');
+    }
+
+    /**
+     * Get all related group IDs (original + all copies)
+     */
+    public function getAllRelatedGroupIds(): array
+    {
+        $ids = [$this->id];
+        
+        // If this is a copy, get the original and all its copies
+        $original = TimetableGroupCopy::where('copy_group_id', $this->id)->first();
+        if ($original) {
+            $ids[] = $original->original_group_id;
+            $allCopies = TimetableGroupCopy::where('original_group_id', $original->original_group_id)->pluck('copy_group_id')->toArray();
+            $ids = array_merge($ids, $allCopies);
+        } else {
+            // This is an original, get all its copies
+            $allCopies = TimetableGroupCopy::where('original_group_id', $this->id)->pluck('copy_group_id')->toArray();
+            $ids = array_merge($ids, $allCopies);
+        }
+        
+        return array_unique($ids);
+    }
 }
