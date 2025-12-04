@@ -111,8 +111,7 @@
                                                 @php
                                                     $subject = $cell['subject'] ?? '—';
                                                     $roomNumber = $cell['room_number'] ?? null;
-                                                    $roomName = $cell['room_name'] ?? null;
-                                                    $roomDisplay = $roomNumber ? ($roomNumber . ($roomName ? ' ' . $roomName : '')) : '—';
+                                                    $roomDisplay = $roomNumber ?: '—';
                                                     $dayLabel = $days[$code] ?? $code;
                                                     $lessonNr = $l; // slot index
                                                     $teacherName = $teacher->full_name ?? '—';
@@ -478,10 +477,8 @@ document.addEventListener('DOMContentLoaded', function(){
                                         >${data.html.group}</span>`;
                     // re-init tooltip
                     if (window.bootstrap) {
-                      const decoded = tooltipHtml;
                       const badge = cell.querySelector('.tt-trigger');
-                      new bootstrap.Tooltip(badge, { title: decoded, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-                                            initBadgeDrag(badge);
+                      initBadgeDrag(badge);
                     }
                     // Update unscheduled list using backend data
                     if (data.group_id && data.remaining_lessons !== undefined && data.group_data) {
@@ -543,7 +540,7 @@ document.addEventListener('DOMContentLoaded', function(){
                               + `<div class=\"tt-divider\"></div>`
                               + `<div class=\"tt-row\"><i class=\"bi bi-collection-fill tt-ico\"></i><span class=\"tt-val\">${swapData.swappedHtml.group}</span></div>`
                               + `<div class=\"tt-row\"><i class=\"bi bi-book-half tt-ico\"></i><span class=\"tt-val\">${swapData.swappedHtml.subject ?? '—'}</span></div>`
-                              + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${swapData.swappedHtml.room ?? '—'}</span></div>`
+                              + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${swapData.swappedHtml.room_number ?? '—'}</span></div>`
                               + `<div class=\"tt-row\"><i class=\"bi bi-person-badge tt-ico\"></i><span class=\"tt-val\">${swapData.swappedHtml.teacher_name ?? '—'}</span></div>`
                               + `</div>`;
                             const swappedB64 = btoa(unescape(encodeURIComponent(swappedTooltip)));
@@ -556,11 +553,8 @@ document.addEventListener('DOMContentLoaded', function(){
                                         data-group-name=\"${swapData.swappedHtml.group}\"
                                         data-subject-name=\"${swapData.swappedHtml.subject ?? ''}\"
                                 >${swapData.swappedHtml.group}</span>`;
-                                if (window.bootstrap) {
-                                    const swappedBadge = originalCell.querySelector('.tt-trigger');
-                                    new bootstrap.Tooltip(swappedBadge, { title: swappedTooltip, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-                                    initBadgeDrag(swappedBadge);
-                                }
+                                const swappedBadge = originalCell.querySelector('.tt-trigger');
+                                initBadgeDrag(swappedBadge);
                             }
                         }
                         
@@ -570,7 +564,7 @@ document.addEventListener('DOMContentLoaded', function(){
                           + `<div class=\"tt-divider\"></div>`
                           + `<div class=\"tt-row\"><i class=\"bi bi-collection-fill tt-ico\"></i><span class=\"tt-val\">${swapData.html.group}</span></div>`
                           + `<div class=\"tt-row\"><i class=\"bi bi-book-half tt-ico\"></i><span class=\"tt-val\">${swapData.html.subject ?? '—'}</span></div>`
-                          + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${swapData.html.room ?? '—'}</span></div>`
+                          + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${swapData.html.room_number ?? '—'}</span></div>`
                           + `<div class=\"tt-row\"><i class=\"bi bi-person-badge tt-ico\"></i><span class=\"tt-val\">${swapData.html.teacher_name ?? '—'}</span></div>`
                           + `</div>`;
                         const b64 = btoa(unescape(encodeURIComponent(tooltipHtml)));
@@ -584,7 +578,6 @@ document.addEventListener('DOMContentLoaded', function(){
                         >${swapData.html.group}</span>`;
                         if (window.bootstrap) {
                             const badge = cell.querySelector('.tt-trigger');
-                            new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
                             initBadgeDrag(badge);
                         }
                         flashMessage('Pamokos sėkmingai sukeistos', 'success');
@@ -603,7 +596,7 @@ document.addEventListener('DOMContentLoaded', function(){
                       + `<div class=\"tt-divider\"></div>`
                       + `<div class=\"tt-row\"><i class=\"bi bi-collection-fill tt-ico\"></i><span class=\"tt-val\">${data.html.group}</span></div>`
                       + `<div class=\"tt-row\"><i class=\"bi bi-book-half tt-ico\"></i><span class=\"tt-val\">${data.html.subject ?? '—'}</span></div>`
-                      + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${data.html.room ?? '—'}</span></div>`
+                      + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${data.html.room_number ?? '—'}</span></div>`
                       + `<div class=\"tt-row\"><i class=\"bi bi-person-badge tt-ico\"></i><span class=\"tt-val\">${data.html.teacher_name ?? '—'}</span></div>`
                       + `</div>`;
                     const b64 = btoa(unescape(encodeURIComponent(tooltipHtml)));
@@ -617,7 +610,6 @@ document.addEventListener('DOMContentLoaded', function(){
                     >${data.html.group}</span>`;
                     if (window.bootstrap) {
                         const badge = cell.querySelector('.tt-trigger');
-                        new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
                         initBadgeDrag(badge);
                     }
                     flashMessage('Pamoka perkelta', 'success');
@@ -631,6 +623,9 @@ document.addEventListener('DOMContentLoaded', function(){
 
 // Global functions - outside DOMContentLoaded for onclick access
 function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeElement) {
+    event.preventDefault();
+    event.stopPropagation();
+    
     // Remove any existing context menu
     const existingMenu = document.getElementById('lessonContextMenu');
     if (existingMenu) existingMenu.remove();
@@ -653,20 +648,34 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
         </div>
     `;
     
-    // Position menu at mouse cursor
-    menu.style.left = event.pageX + 'px';
-    menu.style.top = event.pageY + 'px';
+    // Position menu at mouse cursor using clientX/clientY with fixed position
+    menu.style.position = 'fixed';
+    menu.style.left = '0px';
+    menu.style.top = '0px';
     
+    // Add to DOM to calculate dimensions
     document.body.appendChild(menu);
     
-    // Adjust position if menu goes off screen
-    const rect = menu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-        menu.style.left = (event.pageX - rect.width) + 'px';
+    // Get actual dimensions for adjustment
+    const menuRect = menu.getBoundingClientRect();
+    const menuWidth = menuRect.width;
+    const menuHeight = menuRect.height;
+    
+    let adjustedLeft = event.clientX;
+    let adjustedTop = event.clientY;
+    
+    // Keep menu within viewport with 10px margin
+    if (adjustedLeft + menuWidth + 10 > window.innerWidth) {
+        adjustedLeft = Math.max(10, window.innerWidth - menuWidth - 10);
     }
-    if (rect.bottom > window.innerHeight) {
-        menu.style.top = (event.pageY - rect.height) + 'px';
+    
+    if (adjustedTop + menuHeight + 10 > window.innerHeight) {
+        adjustedTop = Math.max(10, window.innerHeight - menuHeight - 10);
     }
+    
+    // Apply position
+    menu.style.left = adjustedLeft + 'px';
+    menu.style.top = adjustedTop + 'px';
     
     // Handle menu item clicks
     menu.querySelectorAll('.context-menu-item').forEach(item => {
@@ -815,6 +824,7 @@ async function openGroupEditModal(groupId) {
                 
                 if (submitResp.ok && result.success) {
                     bsModal.hide();
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                     flashMessage('Grupė sėkmingai atnaujinta', 'success');
                     setTimeout(() => window.location.reload(), 1000);
                 } else {
@@ -1359,6 +1369,7 @@ async function openEditGroupModal(groupId, buttonElement) {
                 
                 if (result.success) {
                     bsEditModal.hide();
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                     flashMessage('Grupė atnaujinta', 'success');
                     setTimeout(() => location.reload(), 1000);
                 } else {
@@ -1889,6 +1900,7 @@ function showGroupCopyModal(groupId, groupName, subjectName, teacherId, day, slo
                     }
                     
                     copyModal.hide();
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                     location.reload(); // Reload to show updated timetable
                 } catch (err) {
                     alert('Klaida siunčiant užklausą');
@@ -1935,7 +1947,7 @@ async function addLessonToSlot(groupId, teacherId, day, slot, tempRoomId) {
               + `<div class=\"tt-divider\"></div>`
               + `<div class=\"tt-row\"><i class=\"bi bi-collection-fill tt-ico\"></i><span class=\"tt-val\">${data.html.group}</span></div>`
               + `<div class=\"tt-row\"><i class=\"bi bi-book-half tt-ico\"></i><span class=\"tt-val\">${data.html.subject ?? '—'}</span></div>`
-              + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${data.html.room ?? '—'}</span></div>`
+                      + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${data.html.room_number ?? '—'}</span></div>`
               + `<div class=\"tt-row\"><i class=\"bi bi-person-badge tt-ico\"></i><span class=\"tt-val\">${data.html.teacher_name ?? '—'}</span></div>`
               + `</div>`;
             const b64 = btoa(unescape(encodeURIComponent(tooltipHtml)));
@@ -1947,10 +1959,9 @@ async function addLessonToSlot(groupId, teacherId, day, slot, tempRoomId) {
                     data-group-name=\"${data.html.group}\"
                     data-subject-name=\"${data.html.subject ?? ''}\"
             >${data.html.group}</span>`;
-            // re-init tooltip and drag
+            // re-init drag
             if (window.bootstrap) {
                 const badge = cell.querySelector('.tt-trigger');
-                new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
                 initBadgeDrag(badge);
             }
         }
@@ -2048,7 +2059,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if(!html) return;
             // Fallback plain title
             el.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
-            new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+            // Avoid duplicate tooltips
+            const existing = bootstrap.Tooltip.getInstance(el);
+            if (!existing) {
+                new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+            }
         });
     }
 });
@@ -2120,13 +2135,37 @@ tbody .sticky-col-name {
     font-size: 0.75rem; 
     box-shadow: 0 4px 12px rgba(0,0,0,0.25);
 }
-.tt-inner { display: flex; flex-direction: column; gap: 0.5rem; }
-.tt-row { display: flex; align-items: flex-start; gap: 0.65rem; line-height: 1.3; }
-.tt-row-head { font-weight: 600; }
-.tt-val { color: #f8f9fa; font-weight: 500; letter-spacing: .2px; }
-.tt-ico { color: #10b981; font-size: 1.05rem; flex-shrink: 0; margin-right: 6px; margin-top: 2px; }
-.tt-row .tt-val { display: inline-block; padding-top: 1px; }
-.tt-divider { height:1px; background:#374151; margin:4px 0 2px 0; }
+.tt-inner {
+    text-align: left;
+    padding: 0.5rem;
+    min-width: 200px;
+    background-color: #2d3748;
+    border-radius: 4px;
+    color: #ffffff;
+}
+.tt-row {
+    display: flex;
+    align-items: center;
+    padding: 0.35rem 0;
+}
+.tt-row-head {
+    font-weight: 600;
+    padding-bottom: 0.5rem;
+    color: #ffffff;
+}
+.tt-ico {
+    width: 20px;
+    margin-right: 8px;
+    color: #667eea;
+}
+.tt-val {
+    flex: 1;
+    color: #ffffff;
+}
+.tt-divider {
+    border-top: 1px solid rgba(255,255,255,0.2);
+    margin: 0.25rem 0;
+}
 .tt-trigger { transition: transform .12s ease, box-shadow .12s; cursor: pointer; }
 .tt-trigger:hover { transform: translateY(-2px); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
 .tt-trigger.lesson-selected { 
@@ -2136,43 +2175,58 @@ tbody .sticky-col-name {
 }
 
 .context-menu {
-    position: absolute;
+    position: fixed;
     background: white;
-    border: 1px solid #dee2e6;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    min-width: 250px;
-    z-index: 9999;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    min-width: 280px;
+    z-index: 1065;
     font-size: 14px;
-    padding: 4px 0;
+    padding: 8px 0;
+    display: block !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    overflow: visible;
 }
 
 .context-menu-header {
-    padding: 8px 12px;
+    padding: 12px 16px;
     font-weight: 600;
-    color: #495057;
-    border-bottom: 1px solid #e9ecef;
+    color: #212529;
+    border-bottom: 2px solid #e9ecef;
     background: #f8f9fa;
     border-radius: 6px 6px 0 0;
-    font-size: 13px;
+    font-size: 14px;
 }
 
 .context-menu-item {
-    padding: 10px 16px;
+    padding: 12px 16px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    transition: background-color 0.15s ease;
-    color: #212529;
+    transition: all 0.15s ease;
+    color: #212529 !important;
+    white-space: nowrap !important;
+    border: none;
+    background: transparent;
+    text-align: left;
 }
 
 .context-menu-item:hover {
-    background: #f8f9fa;
+    background: #f0f0f0;
+    color: #212529 !important;
+    padding-left: 20px;
+}
+
+.context-menu-item.text-danger {
+    color: #dc3545 !important;
 }
 
 .context-menu-item.text-danger:hover {
-    background: #fff5f5;
-    color: #dc3545;
+    background: #ffe0e0;
+    color: #dc3545 !important;
+    padding-left: 20px;
 }
 
 .context-menu-item i {
@@ -2182,8 +2236,9 @@ tbody .sticky-col-name {
 
 .context-menu-divider {
     height: 1px;
-    background: #e9ecef;
-    margin: 4px 0;
+    background: #d0d0d0;
+    margin: 6px 0;
+    border: none;
 }
 }
 

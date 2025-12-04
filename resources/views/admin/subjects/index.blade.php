@@ -221,6 +221,7 @@
             .then(data => {
                 if (data.success) {
                     bulkDeleteModal.hide();
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                     window.location.reload();
                 }
             });

@@ -255,6 +255,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             
             if (data.success) {
+                document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                 window.location.reload();
             } else {
                 alert(data.message || 'Klaida kuriant kabinetą');
@@ -397,6 +398,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             
             if (data.success) {
+                document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                 window.location.reload();
             }
         } catch (error) {

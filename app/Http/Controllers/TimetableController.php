@@ -221,7 +221,8 @@ class TimetableController extends Controller
                 'group_id' => $g->id,
                 'group' => $g->name,
                 'subject' => $g->subject?->name,
-                'room' => $g->room?->number ? ($g->room->number.' '.$g->room->name) : null,
+                'room_number' => $g->room?->number,
+                'room_name' => $g->room?->name,
                 'teacher_id' => $teacher,
             ];
         }
@@ -433,7 +434,8 @@ class TimetableController extends Controller
             'html' => [
                 'group' => $group->name,
                 'subject' => $group->subject?->name,
-                'room' => $group->room?->number ? ($group->room->number.' '.$group->room->name) : null,
+                'room_number' => $group->room?->number,
+                'room_name' => $group->room?->name,
                 'slot_id' => $slotModel->id,
                 'teacher_id' => $group->teacherLoginKey?->id,
                 'teacher_name' => $group->teacherLoginKey?->full_name,
@@ -672,6 +674,17 @@ class TimetableController extends Controller
             'message' => 'Grupės kopija sėkmingai sukurta ir pamoka pridėta',
             'new_group_id' => $newGroup->id,
             'original_group_id' => $trueOriginalGroup->id,
+            'group_id' => $trueOriginalGroup->id,
+            'remaining_lessons' => max(0, $trueOriginalGroup->lessons_per_week - $timetable->slots()->where('timetable_group_id', $trueOriginalGroup->id)->count()),
+            'group_data' => [
+                'group_id' => $trueOriginalGroup->id,
+                'group_name' => $trueOriginalGroup->name,
+                'subject_name' => $trueOriginalGroup->subject->name ?? '—',
+                'teacher_login_key_id' => $trueOriginalGroup->teacher_login_key_id,
+                'teacher_name' => $trueOriginalGroup->teacherLoginKey->user->full_name ?? '—',
+                'room_number' => $trueOriginalGroup->room->number ?? null,
+                'room_name' => $trueOriginalGroup->room->name ?? null,
+            ],
         ]);
     }
 
@@ -1617,13 +1630,8 @@ class TimetableController extends Controller
             return response()->json([]);
         }
         
-        // Get teacher login keys with their working days
         $teachers = \App\Models\LoginKey::whereIn('id', $teacherIds)
-            ->with(['user', 'teacherWorkingDays' => function($query) use ($timetable) {
-                $query->where('timetable_id', $timetable->id);
-            }])
-            ->orderBy('last_name')
-            ->orderBy('first_name')
+            ->with('teacherWorkingDays')
             ->get();
         
         $result = [];

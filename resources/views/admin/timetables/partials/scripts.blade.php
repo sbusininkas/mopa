@@ -302,6 +302,7 @@ function copyUnscheduledGroup(groupId, unscheduledCount) {
     .then(data => {
         if (data.success) {
             alert(data.message);
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
             window.location.reload();
         } else {
             alert('Klaida: ' + (data.message || 'Nepavyko sukurti kopijos'));
@@ -617,6 +618,7 @@ function saveUnscheduledGroup(groupId) {
             if (modal) modal.hide();
             
             // Show success message
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
             showFlashMessage('Grupė sėkmingai atnaujinta!', 'success');
             setTimeout(() => window.location.reload(), 1000);
         } else {
@@ -649,6 +651,7 @@ function confirmCopyGroup(groupId, unscheduledCount) {
             const modal = bootstrap.Modal.getInstance(document.getElementById('copyUnscheduledGroup' + groupId));
             if (modal) modal.hide();
             
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
             showFlashMessage(data.message, 'success');
             setTimeout(() => window.location.reload(), 1000);
         } else {
@@ -700,6 +703,7 @@ function confirmCopyGroupWithData(groupId, unscheduledCount) {
             const modal = bootstrap.Modal.getInstance(document.getElementById('copyUnscheduledGroup' + groupId));
             if (modal) modal.hide();
             
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
             showFlashMessage(result.message, 'success');
             setTimeout(() => window.location.reload(), 1000);
         } else {
@@ -968,6 +972,7 @@ function startGenerationPolling() {
                 if (data.finished || data.status === 'failed') {
                     clearInterval(poll);
                     // Reload page to reflect final state & slots
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                     setTimeout(()=> window.location.reload(), 800);
                 }
             })

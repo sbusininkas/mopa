@@ -54,8 +54,8 @@
         
         .navbar-modern .nav-link:hover {
             color: white;
-            background-color: rgba(255, 255, 255, 0.1);
-            transform: translateY(-2px);
+            border-bottom: 2px solid rgba(255, 255, 255, 0.9);
+            padding-bottom: calc(0.5rem - 2px);
         }
         
         .navbar-modern .dropdown-menu {
@@ -93,6 +93,30 @@
         .navbar-modern .dropdown-item i {
             width: 20px;
             margin-right: 8px;
+        }
+        
+        /* School Switch Dropdown - Modern hover effect */
+        .school-switch-dropdown .dropdown-item {
+            padding: 0.75rem 1.25rem;
+            transition: all 0.3s ease;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            position: relative;
+        }
+        
+        .school-switch-dropdown .dropdown-item:hover {
+            background: transparent;
+            border-bottom-color: var(--primary-color);
+            transform: translateX(5px);
+        }
+        
+        .school-switch-dropdown .dropdown-item:hover i,
+        .school-switch-dropdown .dropdown-item:hover span {
+            color: var(--primary-color) !important;
         }
         
         /* Notification Badge */
@@ -168,21 +192,41 @@
             transition: transform 0.3s ease;
         }
         .admin-sidebar .nav-link:hover {
-            background: linear-gradient(90deg, rgba(102, 126, 234, 0.08) 0%, transparent 100%);
             border-left-color: var(--primary-color);
             color: var(--primary-color);
-            transform: translateX(4px);
-            padding-left: 1.75rem;
+            position: relative;
+        }
+        .admin-sidebar .nav-link:hover::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 1.5rem;
+            right: 1.5rem;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary-color), transparent);
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from { width: 0; opacity: 0; }
+            to { width: calc(100% - 3rem); opacity: 1; }
         }
         .admin-sidebar .nav-link:hover i {
             transform: scale(1.15) rotate(5deg);
         }
         .admin-sidebar .nav-link.active {
-            background: linear-gradient(90deg, rgba(102, 126, 234, 0.12) 0%, rgba(102, 126, 234, 0.05) 100%);
             border-left-color: var(--primary-color);
             color: var(--primary-color);
             font-weight: 600;
-            box-shadow: inset 0 0 0 1px rgba(102, 126, 234, 0.1);
+            position: relative;
+        }
+        .admin-sidebar .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 1.5rem;
+            right: 1.5rem;
+            height: 2px;
+            background: var(--primary-color);
         }
         .admin-sidebar .nav-link.active i {
             transform: scale(1.1);
@@ -435,6 +479,14 @@
     
     <?php if(auth()->guard()->check()): ?>
     <script>
+        // Remove any leftover modal backdrops on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('padding-right');
+        });
+        
         // Fetch unread notifications
         function fetchUnreadNotifications() {
             fetch('<?php echo e(route('notifications.unread')); ?>')

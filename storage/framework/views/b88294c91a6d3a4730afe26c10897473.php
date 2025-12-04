@@ -36,8 +36,7 @@
                                                 if ($cell) {
                                                     $subject = $cell['subject'] ?? '—';
                                                     $roomNumber = $cell['room_number'] ?? null;
-                                                    $roomName = $cell['room_name'] ?? null;
-                                                    $roomDisplay = $roomNumber ? ($roomNumber . ($roomName ? ' ' . $roomName : '')) : '—';
+                                                    $roomDisplay = $roomNumber ?: '—';
                                                     $dayLabel = $label;
                                                     $lessonNr = $row;
                                                     $teacherName = $teacher->full_name ?? '—';
@@ -973,6 +972,13 @@ function showGroupCopyModal(groupId, groupName, subjectName, teacherId, day, slo
                     }
                     
                     copyModal.hide();
+                    
+                    // Update unscheduled list if data provided
+                    if (typeof updateUnscheduledList === 'function' && data.group_id !== undefined && data.remaining_lessons !== undefined && data.group_data) {
+                        updateUnscheduledList(data.group_id, data.remaining_lessons, data.group_data);
+                    }
+                    
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                     location.reload(); // Reload to show updated timetable
                 } catch (err) {
                     alert('Klaida siunčiant užklausą');
@@ -1004,17 +1010,14 @@ function createTooltipData(groupName, subjectName, roomDisplay, teacherName, day
 
 // Helper function to initialize tooltip on element
 function initTooltip(el) {
-    if (!window.bootstrap || !el) return;
-    const b64 = el.getAttribute('data-tooltip-b64');
-    if (!b64) return;
-    try {
-        const html = decodeURIComponent(Array.prototype.map.call(atob(b64), c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
-        el.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
-        new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-    } catch(e) { }
+    // Tooltips are initialized globally - this function is now for reference only
+    // No need to reinitialize here
 }
 
 function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeElement) {
+    event.preventDefault();
+    event.stopPropagation();
+    
     // Remove any existing context menu
     const existingMenu = document.getElementById('lessonContextMenu');
     if (existingMenu) existingMenu.remove();
@@ -1037,20 +1040,34 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
         </div>
     `;
     
-    // Position menu at mouse cursor
-    menu.style.left = event.pageX + 'px';
-    menu.style.top = event.pageY + 'px';
+    // Position menu at mouse cursor using clientX/clientY with fixed position
+    menu.style.position = 'fixed';
+    menu.style.left = '0px';
+    menu.style.top = '0px';
     
+    // Add to DOM to calculate dimensions
     document.body.appendChild(menu);
     
-    // Adjust position if menu goes off screen
-    const rect = menu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-        menu.style.left = (event.pageX - rect.width) + 'px';
+    // Get actual dimensions for adjustment
+    const menuRect = menu.getBoundingClientRect();
+    const menuWidth = menuRect.width;
+    const menuHeight = menuRect.height;
+    
+    let adjustedLeft = event.clientX;
+    let adjustedTop = event.clientY;
+    
+    // Keep menu within viewport with 10px margin
+    if (adjustedLeft + menuWidth + 10 > window.innerWidth) {
+        adjustedLeft = Math.max(10, window.innerWidth - menuWidth - 10);
     }
-    if (rect.bottom > window.innerHeight) {
-        menu.style.top = (event.pageY - rect.height) + 'px';
+    
+    if (adjustedTop + menuHeight + 10 > window.innerHeight) {
+        adjustedTop = Math.max(10, window.innerHeight - menuHeight - 10);
     }
+    
+    // Apply position
+    menu.style.left = adjustedLeft + 'px';
+    menu.style.top = adjustedTop + 'px';
     
     // Handle menu item clicks
     menu.querySelectorAll('.context-menu-item').forEach(item => {
@@ -1196,6 +1213,7 @@ async function openGroupEditModal(groupId) {
                 
                 if (submitResp.ok && result.success) {
                     bsModal.hide();
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                     flashMessage('Grupė sėkmingai atnaujinta', 'success');
                     setTimeout(() => window.location.reload(), 1000);
                 } else {
@@ -1478,6 +1496,9 @@ async function findAvailableSlots(groupId, groupName, subjectName, teacherId) {
         cell.style.position='relative';
         cell.appendChild(badge);
     });
+    
+    // Setup drag-drop listeners for room conflict badges
+    setupBadgeDragDrop();
 }
 
 function findCellByDayAndSlot(day, slot) {
@@ -1666,22 +1687,8 @@ function showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, d
             <h6 class="mt-3">Konfliktai (spauskite detalesnei informacijai):</h6>
             ${conflictsHtml}
             
-            <h6 class="mt-3">Sprendimas - pasirinkite kitą kabinetą:</h6>
-            <div class="d-flex gap-2 align-items-end">
-                <div class="flex-grow-1">
-                    <select class="form-select" id="newRoomSelect">
-                        <option value="">-- Pasirinkite kabinetą --</option>
-                        ${availableRooms.map(r => `
-                            <option value="${r.id}" ${r.id == currentRoomId ? 'selected' : ''}>
-                                ${r.number} ${r.name || ''}
-                            </option>
-                        `).join('')}
-                    </select>
-                </div>
-                <button type="button" class="btn btn-warning" 
-                        onclick="addLessonWithNewRoom(${groupId}, ${teacherId}, '${day}', ${slot}, 'newRoomSelect'); bootstrap.Modal.getInstance(document.querySelector('.modal.show')).hide();">
-                    <i class="bi bi-plus-circle"></i> Pridėti
-                </button>
+            <div class="alert alert-info mt-3">
+                <i class="bi bi-info-circle"></i> Norėdami pridėti šią pamoką su kitu kabinetu, spauskite žemiau
             </div>
         `;
     }
@@ -1703,6 +1710,11 @@ function showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, d
                         <button type="button" class="btn btn-success" 
                                 onclick="addLessonToSlot(${groupId}, ${teacherId}, '${day}', ${slot}, null); bootstrap.Modal.getInstance(document.querySelector('.modal.show')).hide();">
                             <i class="bi bi-plus-circle"></i> Pridėti pamoką
+                        </button>
+                    ` : status === 'room_conflict' ? `
+                        <button type="button" class="btn btn-warning"
+                                onclick="showRoomConflictModal({available_rooms: ${JSON.stringify(availableRooms).replace(/"/g, '&quot;')}, current_room: {id: ${currentRoomId}}}, {day: '${day}', slot: ${slot}, teacherId: ${teacherId}, groupId: ${groupId}, groupName: '${groupName}', subjectName: '${subjectName}'}); bootstrap.Modal.getInstance(document.querySelector('.modal.show')).hide();">
+                            <i class="bi bi-door-closed"></i> Kurti grupės kopiją su kitu kabinetu
                         </button>
                     ` : ''}
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Uždaryti</button>
@@ -1843,6 +1855,7 @@ async function addLessonToSlot(groupId, teacherId, day, slot, roomId) {
         
         const data = await resp.json();
         if (data.success) {
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
             flashMessage('Pamoka sėkmingai pridėta', 'success');
             setTimeout(() => location.reload(), 1000);
         } else {
@@ -1995,6 +2008,153 @@ function flashMessage(msg,type){
     const el=document.createElement('div'); el.className=`alert alert-${type} py-1 px-2 mb-2`; el.textContent=msg; box.appendChild(el); setTimeout(()=>{ el.remove(); if(!box.children.length) box.remove(); },3000);
 }
 
+// Setup badge drag-over listeners for room conflict badges (must be OUTSIDE DOMContentLoaded)
+function setupBadgeDragDrop() {
+    document.querySelectorAll('.availability-badge.bg-warning').forEach(badge => {
+        // Remove existing listeners to avoid duplicates
+        const newBadge = badge.cloneNode(true);
+        badge.parentNode.replaceChild(newBadge, badge);
+        const updatedBadge = newBadge;
+        
+        updatedBadge.addEventListener('dragover', e => {
+            if (!dragged || draggedKind !== 'unscheduled') return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            updatedBadge.style.opacity = '0.7';
+            updatedBadge.style.transform = 'scale(1.2)';
+        });
+        updatedBadge.addEventListener('dragleave', () => {
+            updatedBadge.style.opacity = '1';
+            updatedBadge.style.transform = 'scale(1)';
+        });
+        updatedBadge.addEventListener('drop', async e => {
+            e.preventDefault();
+            e.stopPropagation(); // PREVENT parent drop handler from firing!
+            updatedBadge.style.opacity = '1';
+            updatedBadge.style.transform = 'scale(1)';
+            
+            if (!dragged || draggedKind !== 'unscheduled') return;
+            
+            // Get cell info (parent .timetable-cell)
+            const cell = updatedBadge.closest('.timetable-cell');
+            if (!cell) return;
+            
+            const groupId = dragged.dataset.groupId;
+            const groupName = dragged.dataset.groupName;
+            const subjectName = dragged.dataset.subjectName;
+            const teacherId = cell.dataset.teacherId;
+            const day = cell.dataset.day;
+            const slot = cell.dataset.slot;
+            
+            // Fetch conflict data
+            try {
+                const resp = await fetch(`<?php echo e(route('schools.timetables.check-conflict', [$school, $timetable])); ?>`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, day: day, slot: slot })
+                });
+                const data = await resp.json();
+                console.log('Drag-drop conflict check:', data);
+                
+                // Check if there's a room conflict in the conflicts array
+                const hasRoomConflict = data.conflicts && Array.isArray(data.conflicts) && data.conflicts.some(c => 
+                    typeof c === 'object' && c.type === 'room'
+                );
+                
+                // If it's only a room conflict (no students/teacher conflicts), show group copy modal
+                if (hasRoomConflict && data.available_rooms) {
+                    console.log('Room conflict detected, showing group copy flow');
+                    showRoomConflictModal(data, { day, slot, teacherId, groupId, groupName, subjectName });
+                    return;
+                }
+                
+                // If there are blocking conflicts (not just room), show error
+                if (data.hasConflicts) {
+                    console.log('Other conflicts detected:', data.message);
+                    showErrorModal('Aptiktai konfliktai', data.message || 'Šiame langelyje negalima pridėti pamokos');
+                    return;
+                }
+                
+                // If no conflicts, add lesson directly
+                console.log('No conflicts, adding lesson');
+                try {
+                    const addResp = await fetch(`<?php echo e(route('schools.timetables.manual-slot', [$school, $timetable])); ?>`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, day: day, slot: slot })
+                    });
+                    const addData = await addResp.json();
+                    console.log('Add lesson response:', addResp.status, addData);
+                    
+                    if (!addResp.ok || !addData.success) {
+                        // Check if it's a room conflict
+                        if (addData.conflict_type === 'room' && addData.available_rooms) {
+                            console.log('Room conflict detected during add, showing modal...', addData);
+                            showRoomConflictModal(addData, { day, slot, teacherId, groupId, groupName, subjectName });
+                            return;
+                        }
+                        console.log('Error response:', addData);
+                        showErrorModal('Klaida', addData.error || 'Nepavyko pridėti pamokos');
+                        return;
+                    }
+                    
+                    // Update cell with new badge
+                    const tooltipHtml = `<div class=\"tt-inner\">`
+                      + `<div class=\"tt-row tt-row-head\"><i class=\"bi bi-clock-history tt-ico\"></i><span class=\"tt-val\">${day} • ${slot} pamoka</span></div>`
+                      + `<div class=\"tt-divider\"></div>`
+                      + `<div class=\"tt-row\"><i class=\"bi bi-collection-fill tt-ico\"></i><span class=\"tt-val\">${addData.html.group}</span></div>`
+                      + `<div class=\"tt-row\"><i class=\"bi bi-book-half tt-ico\"></i><span class=\"tt-val\">${addData.html.subject ?? '—'}</span></div>`
+                      + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${addData.html.room ?? '—'}</span></div>`
+                      + `<div class=\"tt-row\"><i class=\"bi bi-person-badge tt-ico\"></i><span class=\"tt-val\">${addData.html.teacher_name ?? '—'}</span></div>`
+                      + `</div>`;
+                    const b64 = btoa(unescape(encodeURIComponent(tooltipHtml)));
+                    cell.innerHTML = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" data-tooltip-b64=\"${b64}\" draggable=\"true\"
+                            data-kind=\"scheduled\"
+                            data-slot-id=\"${addData.html.slot_id}\"
+                            data-group-id=\"${groupId}\"
+                            data-teacher-id=\"${teacherId}\"
+                            data-group-name=\"${addData.html.group}\"
+                            data-subject-name=\"${addData.html.subject ?? ''}\"
+                    >${addData.html.group}</span>`;
+                    if (window.bootstrap) {
+                        const badge = cell.querySelector('.tt-trigger');
+                        initBadgeDrag(badge);
+                        // Initialize tooltip for the new element only (avoid double init)
+                        const b64 = badge.getAttribute('data-tooltip-b64');
+                        const html = b64 ? decodeURIComponent(Array.prototype.map.call(atob(b64), c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')) : '';
+                        if(html){
+                            badge.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
+                            const existing = bootstrap.Tooltip.getInstance(badge);
+                            if (!existing) {
+                                new bootstrap.Tooltip(badge, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+                            }
+                        }
+                    }
+                    
+                    // Update unscheduled list using backend data
+                    if (addData.group_id && addData.remaining_lessons !== undefined && addData.group_data) {
+                        updateUnscheduledList(addData.group_id, addData.remaining_lessons, addData.group_data);
+                    }
+                    flashMessage('Pamoka sėkmingai įtraukta', 'success');
+                } catch(err) {
+                    showErrorModal('Klaida', 'Klaida siunčiant užklausą');
+                }
+            } catch (err) {
+                console.error('Error checking conflicts:', err);
+                showErrorModal('Klaida', 'Klaida tikrinant konfliktus');
+            }
+        });
+    });
+}
+
 function clearAvailabilityMarks(){
     // Remove availability badges and cell highlight classes
     document.querySelectorAll('.availability-badge').forEach(b=>b.remove());
@@ -2111,6 +2271,7 @@ async function openEditGroupModal(groupId, buttonElement) {
                 
                 if (result.success) {
                     bsEditModal.hide();
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                     flashMessage('Grupė atnaujinta', 'success');
                     setTimeout(() => location.reload(), 1000);
                 } else {
@@ -2138,7 +2299,10 @@ if (window.bootstrap) {
         if(!html) return;
         // Fallback plain title
         el.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
-        new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+        const existing = bootstrap.Tooltip.getInstance(el);
+        if (!existing) {
+            new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+        }
     });
 }
 </script>
@@ -2155,43 +2319,58 @@ if (window.bootstrap) {
 }
 
 .context-menu {
-    position: absolute;
+    position: fixed;
     background: white;
-    border: 1px solid #dee2e6;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    min-width: 250px;
-    z-index: 9999;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    min-width: 280px;
+    z-index: 1065;
     font-size: 14px;
-    padding: 4px 0;
+    padding: 8px 0;
+    display: block !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    overflow: visible;
 }
 
 .context-menu-header {
-    padding: 8px 12px;
+    padding: 12px 16px;
     font-weight: 600;
-    color: #495057;
-    border-bottom: 1px solid #e9ecef;
+    color: #212529;
+    border-bottom: 2px solid #e9ecef;
     background: #f8f9fa;
     border-radius: 6px 6px 0 0;
-    font-size: 13px;
-}
+    font-size: 14px;
+}}
 
 .context-menu-item {
-    padding: 10px 16px;
+    padding: 12px 16px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    transition: background-color 0.15s ease;
-    color: #212529;
+    transition: all 0.15s ease;
+    color: #212529 !important;
+    white-space: nowrap !important;
+    border: none;
+    background: transparent;
+    text-align: left;
 }
 
 .context-menu-item:hover {
-    background: #f8f9fa;
+    background: #f0f0f0;
+    color: #212529 !important;
+    padding-left: 20px;
+}
+
+.context-menu-item.text-danger {
+    color: #dc3545 !important;
 }
 
 .context-menu-item.text-danger:hover {
-    background: #fff5f5;
-    color: #dc3545;
+    background: #ffe0e0;
+    color: #dc3545 !important;
+    padding-left: 20px;
 }
 
 .context-menu-item i {
@@ -2201,8 +2380,9 @@ if (window.bootstrap) {
 
 .context-menu-divider {
     height: 1px;
-    background: #e9ecef;
-    margin: 4px 0;
+    background: #d0d0d0;
+    margin: 6px 0;
+    border: none;
 }
 .unscheduled-item { cursor: move; padding: 0.25rem 0.5rem; border-radius: 4px; transition: background-color 0.2s; }
 .unscheduled-item:hover { background-color: #f8f9fa; }
@@ -2235,6 +2415,9 @@ if (window.bootstrap) {
     text-align: left;
     padding: 0.5rem;
     min-width: 200px;
+    background-color: #2d3748;
+    border-radius: 4px;
+    color: #ffffff;
 }
 .tt-row {
     display: flex;
@@ -2244,6 +2427,7 @@ if (window.bootstrap) {
 .tt-row-head {
     font-weight: 600;
     padding-bottom: 0.5rem;
+    color: #ffffff;
 }
 .tt-ico {
     width: 20px;
@@ -2252,6 +2436,7 @@ if (window.bootstrap) {
 }
 .tt-val {
     flex: 1;
+    color: #ffffff;
 }
 .tt-divider {
     border-top: 1px solid rgba(255,255,255,0.2);

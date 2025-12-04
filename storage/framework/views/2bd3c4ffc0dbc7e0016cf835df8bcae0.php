@@ -32,7 +32,7 @@
             <button class="btn btn-sm btn-light dropdown-toggle shadow-sm" type="button" id="schoolSwitchDropdown" data-bs-toggle="dropdown" style="font-weight: 500;">
                 <i class="bi bi-arrow-repeat me-1"></i> Perjungti
             </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="schoolSwitchDropdown">
+            <ul class="dropdown-menu dropdown-menu-end shadow school-switch-dropdown" aria-labelledby="schoolSwitchDropdown">
                 <?php $__currentLoopData = $available; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $school): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                     <li>
                         <form method="POST" action="<?php echo e(route('schools.switch', $school)); ?>">

@@ -32,7 +32,7 @@
             <button class="btn btn-sm btn-light dropdown-toggle shadow-sm" type="button" id="schoolSwitchDropdown" data-bs-toggle="dropdown" style="font-weight: 500;">
                 <i class="bi bi-arrow-repeat me-1"></i> Perjungti
             </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="schoolSwitchDropdown">
+            <ul class="dropdown-menu dropdown-menu-end shadow school-switch-dropdown" aria-labelledby="schoolSwitchDropdown">
                 @foreach($available as $school)
                     <li>
                         <form method="POST" action="{{ route('schools.switch', $school) }}">
