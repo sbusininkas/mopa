@@ -273,6 +273,39 @@ class TimetableController extends Controller
         if (!$user->isSupervisor() && !$user->isSchoolAdmin($school->id)) {
             abort(403);
         }
+        // Normalize generation_report values for view (fill missing names)
+        $report = $timetable->generation_report ?? [];
+        if (isset($report['unscheduled']) && is_array($report['unscheduled'])) {
+            $loginKeysById = $school->loginKeys()->pluck('id')->flip(); // map id => index for quick has check
+            foreach ($report['unscheduled'] as &$entry) {
+                // Teacher name fallback
+                if (empty($entry['teacher_name']) && !empty($entry['teacher_login_key_id'])) {
+                    $lkId = $entry['teacher_login_key_id'];
+                    // If teacher belongs to this school, try resolve
+                    if ($loginKeysById->has($lkId)) {
+                        $lk = $school->loginKeys()->where('id', $lkId)->first();
+                        if ($lk) {
+                            $entry['teacher_name'] = $lk->user?->full_name ?: $lk->full_name;
+                        }
+                    }
+                }
+                // Subject name fallback
+                if (empty($entry['subject_name']) && !empty($entry['subject_id'])) {
+                    $entry['subject_name'] = optional($school->subjects->firstWhere('id', $entry['subject_id']))?->name;
+                }
+                // Room data fallback
+                if (!empty($entry['room_id']) && (empty($entry['room_number']) || empty($entry['room_name']))) {
+                    $room = $school->rooms->firstWhere('id', $entry['room_id']);
+                    if ($room) {
+                        $entry['room_number'] = $room->number;
+                        $entry['room_name'] = $room->name;
+                    }
+                }
+            }
+            unset($entry);
+            // Overwrite in-memory only for rendering
+            $timetable->generation_report = $report;
+        }
         
         // Render the unscheduled lessons partial
         $html = view('admin.timetables.partials.unscheduled-lessons', [

@@ -93,10 +93,13 @@
                                 <div class="unscheduled-title">
                                     <?php echo e($u['group_name'] ?? $u['group'] ?? 'Grupė'); ?>
 
-                                    <span class="badge bg-primary ms-2 remaining-badge"><?php echo e($u['remaining_lessons']); ?></span>
+                                    <span class="remaining-count">(<?php echo e($u['remaining_lessons']); ?>)</span>
                                 </div>
                                 <div class="unscheduled-meta">
                                     <span class="unscheduled-subject"><?php echo e($u['subject_name'] ?? $u['subject'] ?? ''); ?></span>
+                                    <?php if(!empty($u['teacher_name'] ?? $u['teacher'] ?? '')): ?>
+                                        <span class="unscheduled-teacher"><?php echo e($u['teacher_name'] ?? $u['teacher']); ?></span>
+                                    <?php endif; ?>
                                     <span class="unscheduled-room"><i class="bi bi-door-closed"></i> <?php echo e($u['room_number'] ?? '—'); ?></span>
                                 </div>
                             </div>
@@ -184,6 +187,14 @@ document.addEventListener('DOMContentLoaded', function(){
     // Make unscheduled items draggable
     document.querySelectorAll('.unscheduled-item').forEach(el => {
         el.addEventListener('dragstart', e => {
+            // Clear all previous conflict colors
+            document.querySelectorAll('.drop-target').forEach(c => {
+                c.classList.remove('bg-success-subtle', 'bg-warning-subtle', 'bg-danger-subtle', 'drop-hover');
+                delete c.dataset.conflictChecked;
+                delete c.dataset.lastCheckedGroup;
+                delete c.dataset.conflictStatus;
+            });
+            
             dragged = el;
             draggedKind = 'unscheduled';
             e.dataTransfer.effectAllowed = 'move';
@@ -198,21 +209,40 @@ document.addEventListener('DOMContentLoaded', function(){
     });
 
     grid.querySelectorAll('.drop-target').forEach(cell => {
-        cell.addEventListener('dragover', e => {
+        let hoverTimeout;
+        cell.addEventListener('dragover', async e => {
             if (!dragged) return;
             const rowTeacherId = String(cell.dataset.teacherId || '');
             const itemTeacherId = String(dragged.dataset.teacherId || '');
             const canDrop = !!itemTeacherId && itemTeacherId === rowTeacherId;
+            
             if (!canDrop) {
                 e.dataTransfer.dropEffect = 'none';
-                cell.classList.remove('drop-hover');
+                cell.classList.remove('drop-hover', 'bg-success-subtle', 'bg-warning-subtle', 'bg-danger-subtle');
                 return;
             }
+            
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
-            cell.classList.add('drop-hover');
+            
+            // Always show blue highlight for unscheduled items on empty cells
+            const hasContent = cell.querySelector('[draggable="true"]');
+            if (draggedKind === 'unscheduled' && !hasContent) {
+                cell.classList.add('drop-hover');
+            } else if (hasContent) {
+                // Cell has content - don't color it
+                cell.classList.remove('drop-hover');
+            } else {
+                // Scheduled item - show normal drop hover
+                cell.classList.add('drop-hover');
+            }
         });
-        cell.addEventListener('dragleave', () => cell.classList.remove('drop-hover'));
+        
+        cell.addEventListener('dragleave', () => {
+            if (hoverTimeout) clearTimeout(hoverTimeout);
+            // Don't remove color classes - keep them for visual feedback
+            // cell.classList.remove('drop-hover', 'bg-success-subtle', 'bg-warning-subtle', 'bg-danger-subtle');
+        });
         cell.addEventListener('drop', async e => {
             e.preventDefault();
             cell.classList.remove('drop-hover');
@@ -1314,8 +1344,8 @@ function updateUnscheduledList(groupId, remainingLessons, groupData) {
         if (existingItem) {
             // Update existing item
             existingItem.dataset.remaining = remainingLessons;
-            const countEl = existingItem.querySelector('.remaining-badge');
-            if (countEl) { countEl.textContent = remainingLessons; }
+            const countEl = existingItem.querySelector('.remaining-count');
+            if (countEl) { countEl.textContent = `(${remainingLessons})`; }
         } else {
             // Create new item with new design (no badges)
             const newItem = document.createElement('div');
@@ -1332,7 +1362,7 @@ function updateUnscheduledList(groupId, remainingLessons, groupData) {
             newItem.innerHTML = `
                 <div class="flex-grow-1">
                     <div class="unscheduled-title">${groupData.group_name}
-                        <span class="badge bg-primary ms-2 remaining-badge">${remainingLessons}</span>
+                        <span class="remaining-count">(${remainingLessons})</span>
                     </div>
                     <div class="unscheduled-meta">
                         <span class="unscheduled-subject">${groupData.subject_name}</span>
@@ -2425,9 +2455,10 @@ if (window.bootstrap) {
 .unscheduled-title { font-weight: 600; color: #212529; }
 .unscheduled-meta { font-size: 0.85rem; color: #6c757d; display: flex; gap: 8px; align-items: baseline; }
 .unscheduled-subject { color: #198754; font-weight: 500; }
-.unscheduled-teacher { color: #212529; background: #212529; border-radius: 4px; padding: 2px 6px; color: #fff; font-size: 0.75rem; }
+.unscheduled-teacher { color: #fff; background: #212529; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; }
 .unscheduled-room { color:#0d6efd; }
 .unscheduled-room::before { content:'•'; margin:0 4px; }
+.remaining-count { color: #6c757d; font-weight: 400; margin-left: 4px; }
 
 /* Slot checking animation */
 .checking-slot {

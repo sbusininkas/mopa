@@ -118,6 +118,36 @@ class TimetableGroupController extends Controller
             $group->students()->sync($validated['student_ids']);
         }
         
+        // Also update generation_report.unscheduled entry so UI reflects new teacher/subject/room
+        $timetable->refresh();
+        $report = $timetable->generation_report ?? [];
+        if (isset($report['unscheduled']) && is_array($report['unscheduled'])) {
+            $group->loadMissing(['subject', 'teacherLoginKey.user', 'room']);
+            $teacherName = optional($group->teacherLoginKey?->user)->full_name
+                ?? ($group->teacherLoginKey->full_name ?? null);
+            foreach ($report['unscheduled'] as &$entry) {
+                if (($entry['group_id'] ?? null) === $group->id) {
+                    $entry['group_name'] = $group->name;
+                    $entry['subject_id'] = $group->subject_id;
+                    $entry['subject_name'] = $group->subject->name ?? ($entry['subject_name'] ?? null);
+                    $entry['teacher_login_key_id'] = $group->teacher_login_key_id;
+                    $entry['teacher_name'] = $teacherName ?? ($entry['teacher_name'] ?? null);
+                    $entry['room_id'] = $group->room_id;
+                    $entry['room_number'] = $group->room->number ?? ($entry['room_number'] ?? null);
+                    $entry['room_name'] = $group->room->name ?? ($entry['room_name'] ?? null);
+                    // If lessons_per_week changed, keep requested the same as lessons_per_week unless UI set requested separately
+                    if (isset($entry['requested_lessons'])) {
+                        $entry['requested_lessons'] = $group->lessons_per_week;
+                        $entry['total_lessons'] = $group->lessons_per_week;
+                        // Do not change remaining here; generation logic controls it
+                    }
+                    break;
+                }
+            }
+            unset($entry);
+            $timetable->update(['generation_report' => $report]);
+        }
+        
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json(['success' => true, 'message' => 'Grupė atnaujinta']);
         }

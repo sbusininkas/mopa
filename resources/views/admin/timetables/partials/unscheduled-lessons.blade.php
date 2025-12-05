@@ -81,7 +81,7 @@
                                 $recommendationClass = 'text-muted';
                             }
                         ?>
-                        <tr>
+                        <tr class="unscheduled-item" data-group-id="{{ $item['group_id'] }}">
                             <td>{{ $item['group_name'] }}</td>
                             <td>{{ $item['subject_name'] }}</td>
                             <td>

@@ -202,11 +202,23 @@
                         <div class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
                             @php
                                 $unscheduled = $timetable->generation_report['unscheduled'] ?? [];
-                                // Group by teacher + subject + students to show mergeable groups
+                                // Prefetch students for the unscheduled group IDs
+                                $unscheduledIds = collect($unscheduled)->pluck('group_id')->filter()->unique()->values()->all();
+                                $studentsByGroup = $timetable->groups()
+                                    ->whereIn('id', $unscheduledIds)
+                                    ->with(['students:id'])
+                                    ->get()
+                                    ->mapWithKeys(function($g){
+                                        $ids = $g->students->pluck('id')->sort()->values()->all();
+                                        return [$g->id => implode(',', $ids)]; // stable hash
+                                    })->toArray();
+
+                                // Group by teacher + subject + identical students to show mergeable groups
                                 $groupedByKey = [];
                                 foreach ($unscheduled as $item) {
                                     if (($item['remaining_lessons'] ?? 0) > 0) {
-                                        $key = ($item['teacher_login_key_id'] ?? '') . '|' . ($item['subject_id'] ?? '');
+                                        $studentHash = $studentsByGroup[$item['group_id']] ?? '';
+                                        $key = ($item['teacher_login_key_id'] ?? '') . '|' . ($item['subject_id'] ?? '') . '|' . $studentHash;
                                         if (!isset($groupedByKey[$key])) {
                                             $groupedByKey[$key] = [];
                                         }

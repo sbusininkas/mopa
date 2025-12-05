@@ -325,24 +325,61 @@ function initializeUnscheduledElements() {
 
 // Scroll to group function
 function scrollToGroup(groupId) {
-    const groupElement = document.getElementById('group' + groupId);
-    if (groupElement) {
-        // Scroll to the element
-        groupElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        // Highlight the group briefly
-        groupElement.style.transition = 'background-color 0.3s';
-        groupElement.style.backgroundColor = '#fff3cd';
-        setTimeout(() => {
-            groupElement.style.backgroundColor = '';
-        }, 2000);
-        
-        // Open the collapse if it's not open
-        const collapseElement = document.getElementById('groupCollapse' + groupId);
-        if (collapseElement && !collapseElement.classList.contains('show')) {
-            const bsCollapse = new bootstrap.Collapse(collapseElement, { toggle: true });
+    const HIGHLIGHT_CLASS = 'group-highlight';
+    const HIGHLIGHT_DURATION_MS = 2500;
+
+    // Clear previous highlights
+    document.querySelectorAll('.' + HIGHLIGHT_CLASS).forEach(el => {
+        el.classList.remove(HIGHLIGHT_CLASS);
+        el.style.outline = '';
+        el.style.boxShadow = '';
+        el.style.backgroundColor = '';
+    });
+
+    // Timetable cells for this group
+    const slotCells = document.querySelectorAll(`[data-group-id='${groupId}']`);
+    slotCells.forEach(cell => {
+        cell.classList.add(HIGHLIGHT_CLASS);
+        cell.style.transition = 'background-color 0.2s, box-shadow 0.2s';
+        cell.style.backgroundColor = 'rgba(255, 229, 100, 0.6)';
+        cell.style.boxShadow = '0 0 0 2px rgba(255, 200, 0, 0.9) inset';
+    });
+
+    // Unscheduled items list entries
+    const unscheduledItems = document.querySelectorAll(`.unscheduled-item[data-group-id='${groupId}']`);
+    unscheduledItems.forEach(item => {
+        item.classList.add(HIGHLIGHT_CLASS);
+        item.style.transition = 'background-color 0.2s, outline-color 0.2s';
+        item.style.backgroundColor = 'rgba(255, 229, 100, 0.4)';
+        item.style.outline = '2px solid rgba(255, 200, 0, 0.9)';
+    });
+
+    // If there are timetable cells, scroll to the first one
+    if (slotCells.length > 0) {
+        slotCells[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+        // Fallback: scroll to group container if present
+        const groupElement = document.getElementById('group' + groupId);
+        if (groupElement) {
+            groupElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }
+
+    // Ensure any collapsible group section opens
+    const collapseElement = document.getElementById('groupCollapse' + groupId);
+    if (collapseElement && !collapseElement.classList.contains('show')) {
+        new bootstrap.Collapse(collapseElement, { toggle: true });
+    }
+
+    // Remove highlight after a delay
+    setTimeout(() => {
+        document.querySelectorAll('.' + HIGHLIGHT_CLASS).forEach(el => {
+            el.classList.remove(HIGHLIGHT_CLASS);
+            el.style.outline = '';
+            el.style.boxShadow = '';
+            el.style.backgroundColor = '';
+        });
+    }, HIGHLIGHT_DURATION_MS);
 }
 
 // Copy unscheduled group function

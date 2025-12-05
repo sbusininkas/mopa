@@ -1,4 +1,25 @@
 <?php $__env->startSection('content'); ?>
+<style>
+.unscheduled-item { cursor: move; padding: 0.25rem 0.5rem; border-radius: 4px; transition: background-color 0.2s; }
+.unscheduled-item:hover { background-color: #f8f9fa; }
+.unscheduled-item.dragging { opacity: 0.5; }
+.unscheduled-item.active-group { background-color:#e7f1ff; outline:2px solid #0d6efd; }
+.unscheduled-title { font-weight: 600; color: #212529; }
+.unscheduled-meta { font-size: 0.85rem; color: #6c757d; display: flex; gap: 8px; align-items: baseline; }
+.unscheduled-subject { color: #198754; font-weight: 500; }
+.unscheduled-teacher { color: #fff; background: #212529; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; }
+.unscheduled-room { color:#0d6efd; }
+.unscheduled-room::before { content:'•'; margin:0 4px; }
+.remaining-count { color: #6c757d; font-weight: 400; margin-left: 4px; }
+.drop-target { transition: background-color 0.2s; }
+.drop-target.drop-hover { background-color: #d4e7ff !important; border: 2px solid #0d6efd !important; }
+.checking-slot { animation: pulse-blue 1s ease-in-out infinite; }
+@keyframes pulse-blue {
+    0%, 100% { background-color: #cfe2ff; }
+    50% { background-color: #9ec5fe; }
+}
+.availability-badge { font-size: 0.7rem; z-index: 5; }
+</style>
 <div style="width: 100%;">
     <div class="row mb-3">
         <div class="col-md-9">
@@ -17,7 +38,7 @@
         <div class="col-md-3">
             <div class="card h-100" id="unscheduledPanel">
                 <div class="card-header p-2"><strong>Nesuplanuotos pamokos</strong></div>
-                <div class="card-body p-2" style="max-height:220px; overflow:auto;">
+                <div class="card-body p-2" style="max-height:60vh; overflow:auto;">
                     <?php $__empty_1 = true; $__currentLoopData = $unscheduled; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $u): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
                         <div class="unscheduled-item mb-1 d-flex align-items-center" draggable="true"
                              data-kind="unscheduled"
@@ -25,12 +46,13 @@
                              data-group-name="<?php echo e($u['group_name'] ?? $u['group'] ?? ''); ?>"
                              data-subject-name="<?php echo e($u['subject_name'] ?? $u['subject'] ?? ''); ?>"
                              data-teacher-id="<?php echo e($u['teacher_login_key_id'] ?? ''); ?>"
+                             data-teacher-name="<?php echo e($u['teacher_name'] ?? $u['teacher'] ?? ''); ?>"
                              data-remaining="<?php echo e($u['remaining_lessons']); ?>">
                             <div class="flex-grow-1">
                                 <div class="unscheduled-title">
                                     <?php echo e($u['group_name'] ?? $u['group'] ?? 'Grupė'); ?>
 
-                                    <span class="badge bg-primary ms-2 remaining-badge"><?php echo e($u['remaining_lessons']); ?></span>
+                                    <span class="remaining-count">(<?php echo e($u['remaining_lessons']); ?>)</span>
                                 </div>
                                 <div class="unscheduled-meta">
                                     <span class="unscheduled-subject"><?php echo e($u['subject_name'] ?? $u['subject'] ?? ''); ?></span>
@@ -54,8 +76,8 @@
                         <span class="text-muted small">Visos grupės suplanuotos</span>
                     <?php endif; ?>
                 </div>
-                <div class="card-footer p-1 small d-flex justify-content-between align-items-center text-muted">
-                    <span>Tempkite ant mokytojo pamokos langelio</span>
+                <div class="card-footer d-flex justify-content-between align-items-center p-1 small text-muted">
+                    <span>Tempkite ant pasirinktų langelių</span>
                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAvailabilityMarks()" title="Išvalyti žymėjimus">Išvalyti</button>
                 </div>
             </div>
@@ -350,6 +372,14 @@ document.addEventListener('DOMContentLoaded', function(){
     
     document.querySelectorAll(UNSCHEDULED_SELECTOR).forEach(el => {
         el.addEventListener('dragstart', e => {
+            // Clear all previous conflict colors
+            document.querySelectorAll('.drop-target').forEach(c => {
+                c.classList.remove('bg-success-subtle', 'bg-warning-subtle', 'bg-danger-subtle', 'drop-hover');
+                delete c.dataset.conflictChecked;
+                delete c.dataset.lastCheckedGroup;
+                delete c.dataset.conflictStatus;
+            });
+            
             window.draggedState.dragged = el;
             window.draggedState.draggedKind = 'unscheduled';
             e.dataTransfer.effectAllowed = 'move';
@@ -416,10 +446,12 @@ document.addEventListener('DOMContentLoaded', function(){
     setupBadgeDragDrop();
 
     document.querySelectorAll('.drop-target').forEach(cell => {
-        cell.addEventListener('dragover', e => {
+        let hoverTimeout;
+        cell.addEventListener('dragover', async e => {
             if (!window.draggedState?.dragged) return;
             const rowTeacherId = String(cell.dataset.teacherId || '');
             let canDrop = true;
+            
             if (window.draggedState.draggedKind === 'unscheduled') {
                 const itemTeacherId = String(window.draggedState.dragged.dataset.teacherId || '');
                 canDrop = !!itemTeacherId && itemTeacherId === rowTeacherId;
@@ -427,16 +459,34 @@ document.addEventListener('DOMContentLoaded', function(){
                 const itemTeacherId = String(window.draggedState.dragged.dataset.teacherId || '');
                 canDrop = !!itemTeacherId && itemTeacherId === rowTeacherId;
             }
+            
             if (!canDrop) {
                 e.dataTransfer.dropEffect = 'none';
-                cell.classList.remove('drop-hover');
-                return; // don't preventDefault: keeps 'no drop' cursor
+                cell.classList.remove('drop-hover', 'bg-success-subtle', 'bg-warning-subtle', 'bg-danger-subtle');
+                return;
             }
+            
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
-            cell.classList.add('drop-hover');
+            
+            // Always show blue highlight for unscheduled items on empty cells
+            const hasContent = cell.querySelector('[draggable="true"]');
+            if (window.draggedState.draggedKind === 'unscheduled' && !hasContent) {
+                cell.classList.add('drop-hover');
+            } else if (hasContent) {
+                // Cell has content - don't color it
+                cell.classList.remove('drop-hover');
+            } else {
+                // Scheduled item - show normal drop hover
+                cell.classList.add('drop-hover');
+            }
         });
-        cell.addEventListener('dragleave', () => cell.classList.remove('drop-hover'));
+        
+        cell.addEventListener('dragleave', () => {
+            if (hoverTimeout) clearTimeout(hoverTimeout);
+            // Don't remove color classes - keep them for visual feedback
+            // cell.classList.remove('drop-hover', 'bg-success-subtle', 'bg-warning-subtle', 'bg-danger-subtle');
+        });
         cell.addEventListener('drop', async e => {
             e.preventDefault();
             cell.classList.remove('drop-hover');
@@ -451,6 +501,9 @@ document.addEventListener('DOMContentLoaded', function(){
                 const groupId = dragged.dataset.groupId;
                 const groupName = dragged.dataset.groupName;
                 const subjectName = dragged.dataset.subjectName;
+                const teacherId = dragged.dataset.teacherId || cell.dataset.teacherId;
+                
+                console.log('Drop manual slot request:', { group_id: groupId, teacher_id: teacherId, day: day, slot: slot });
                 
                 try {
                     const resp = await fetch(`<?php echo e(route('schools.timetables.manual-slot', [$school, $timetable])); ?>`, {
@@ -463,13 +516,14 @@ document.addEventListener('DOMContentLoaded', function(){
                         body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, day: day, slot: slot })
                     });
                     const data = await resp.json();
+                    console.log('Manual slot response:', resp.status, data);
                     if (!resp.ok || !data.success) {
                         // Check if it's a room conflict
                         if (data.conflict_type === 'room' && data.available_rooms) {
                             await showRoomConflictModal(data, cell, groupId, teacherId, day, slot, dragged);
                             return;
                         }
-                        showErrorModal('Klaida', data.error || 'Nepavyko įtraukti pamokos');
+                        showErrorModal('Klaida', data.error || data.message || 'Nepavyko įtraukti pamokos');
                         return;
                     }
                     // Build tooltip for new cell
@@ -1280,14 +1334,29 @@ function updateUnscheduledList(groupId, remainingLessons, groupData){
     if(remainingLessons>0){
         if(existing){
             existing.dataset.remaining=remainingLessons;
-            const badge=existing.querySelector('.remaining-badge'); if(badge) badge.textContent=remainingLessons;
+            const count=existing.querySelector('.remaining-count'); if(count) count.textContent=`(${remainingLessons})`;
         } else if(groupData){
             const div=document.createElement('div');
             div.className='unscheduled-item mb-1 d-flex align-items-center';
             div.draggable=true; div.dataset.kind='unscheduled';
             div.dataset.groupId=groupId; div.dataset.groupName=groupData.group_name; div.dataset.subjectName=groupData.subject_name; div.dataset.teacherId=groupData.teacher_login_key_id||''; div.dataset.teacherName=groupData.teacher_name||''; div.dataset.remaining=remainingLessons;
             const roomInfo = `<span class=\"unscheduled-room\"><i class=\"bi bi-door-closed\"></i> ${groupData.room_number || '—'}</span>`;
-            div.innerHTML=`<div class=\"flex-grow-1\"><div class=\"unscheduled-title\">${groupData.group_name} <span class=\"badge bg-primary ms-2 remaining-badge\">${remainingLessons}</span></div><div class=\"unscheduled-meta\"><span class=\"unscheduled-subject\">${groupData.subject_name}</span>${groupData.teacher_name?`<span class=\"unscheduled-teacher\">${groupData.teacher_name}</span>`:''}${roomInfo}</div></div><div class=\"ms-2\">${groupData.teacher_login_key_id?`<button type='button' class='btn btn-outline-info btn-sm' onclick=\"findAvailableSlots(${groupId}, '${groupData.group_name.replace(/'/g,"\\'")}', '${groupData.subject_name.replace(/'/g,"\\'")}', ${groupData.teacher_login_key_id})\" title='Rasti laisvus langelius'><i class='bi bi-search'></i></button>`:''}</div>`;
+            div.innerHTML=`<div class=\"flex-grow-1\"><div class=\"unscheduled-title\">${groupData.group_name} <span class=\"remaining-count\">(${remainingLessons})</span></div><div class=\"unscheduled-meta\"><span class=\"unscheduled-subject\">${groupData.subject_name}</span>${roomInfo}</div></div><div class=\"ms-2\">${groupData.teacher_login_key_id?`<button type='button' class='btn btn-outline-info btn-sm' onclick=\"findAvailableSlots(${groupId}, '${groupData.group_name.replace(/'/g,"\\'")}', '${groupData.subject_name.replace(/'/g,"\\'")}', ${groupData.teacher_login_key_id})\" title='Rasti laisvus langelius'><i class='bi bi-search'></i></button>`:''}</div>`;
+            
+            // Add drag event listeners to the new element
+            div.addEventListener('dragstart', e => {
+                window.draggedState.dragged = div;
+                window.draggedState.draggedKind = 'unscheduled';
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', div.dataset.groupId);
+                div.classList.add('dragging');
+            });
+            div.addEventListener('dragend', () => {
+                window.draggedState.dragged?.classList.remove('dragging');
+                window.draggedState.dragged = null;
+                window.draggedState.draggedKind = null;
+            });
+            
             panel.insertBefore(div,panel.firstChild);
         }
     } else if(existing){
@@ -1435,7 +1504,11 @@ async function findAvailableSlots(groupId, groupName, subjectName, teacherId) {
     // Highlight selected group in unscheduled list
     document.querySelectorAll('.unscheduled-item').forEach(el=>el.classList.remove('active-group'));
     const chosen=document.querySelector(`.unscheduled-item[data-group-id='${groupId}']`);
-    if(chosen) chosen.classList.add('active-group');
+    console.log('Finding group:', groupId, 'Element found:', chosen);
+    if(chosen) {
+        chosen.classList.add('active-group');
+        console.log('Added active-group class, element classes:', chosen.className);
+    }
 
     // Overlay
     let overlay = document.getElementById('availabilityLoading');
@@ -2316,23 +2389,14 @@ tbody .sticky-col-name {
 #timetableCard.fullscreen-active #timetableContainer { width: 100%; }
 
 /* Drag & drop styles */
-.unscheduled-item {
-    cursor: move;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    transition: background-color 0.2s;
-}
-.unscheduled-item:hover {
-    background-color: #f8f9fa;
-}
-.unscheduled-item.dragging {
-    opacity: 0.5;
-}
+.unscheduled-item { cursor: move; padding: 0.25rem 0.5rem; border-radius: 4px; transition: background-color 0.2s; }
+.unscheduled-item:hover { background-color: #f8f9fa; }
+.unscheduled-item.dragging { opacity: 0.5; }
 .unscheduled-item.active-group { background-color:#e7f1ff; outline:2px solid #0d6efd; }
-.unscheduled-title { font-weight:600; color:#212529; }
-.unscheduled-meta { font-size:0.85rem; color:#6c757d; display:flex; gap:8px; align-items:baseline; }
-.unscheduled-subject { color:#198754; font-weight:500; }
-.unscheduled-teacher::before { content:'•'; margin:0 4px; }
+.unscheduled-title { font-weight: 600; color: #212529; }
+.unscheduled-meta { font-size: 0.85rem; color: #6c757d; display: flex; gap: 8px; align-items: baseline; }
+.unscheduled-subject { color: #198754; font-weight: 500; }
+.unscheduled-teacher { color: #212529; background: #212529; border-radius: 4px; padding: 2px 6px; color: #fff; font-size: 0.75rem; }
 .unscheduled-room { color:#0d6efd; }
 .unscheduled-room::before { content:'•'; margin:0 4px; }
 .drop-target {
