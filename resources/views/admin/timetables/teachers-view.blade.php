@@ -213,6 +213,21 @@
     });
 })();
 
+// Tooltip helper to initialize a single element safely
+function initTooltipEl(el){
+    if (!window.bootstrap || !el) return;
+    const b64 = el.getAttribute('data-tooltip-b64');
+    if (!b64) return;
+    const html = (function(b){
+        try { return decodeURIComponent(Array.prototype.map.call(atob(b), c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')); } catch(e){ return ''; }
+    })(b64);
+    if(!html) return;
+    el.setAttribute('aria-label', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
+    const existing = bootstrap.Tooltip.getInstance(el);
+    if (existing) existing.dispose();
+    new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+}
+
 // Setup badge drag-over listeners for room conflict badges (must be OUTSIDE DOMContentLoaded)
 function setupBadgeDragDrop() {
     document.querySelectorAll('.availability-badge.bg-warning').forEach(badge => {
@@ -476,10 +491,9 @@ document.addEventListener('DOMContentLoaded', function(){
                                                 data-subject-name=\"${data.html.subject ?? ''}\"
                                         >${data.html.group}</span>`;
                     // re-init tooltip
-                    if (window.bootstrap) {
-                      const badge = cell.querySelector('.tt-trigger');
-                      initBadgeDrag(badge);
-                    }
+                                        const badge = cell.querySelector('.tt-trigger');
+                                        initBadgeDrag(badge);
+                                        initTooltipEl(badge);
                     // Update unscheduled list using backend data
                     if (data.group_id && data.remaining_lessons !== undefined && data.group_data) {
                         updateUnscheduledList(data.group_id, data.remaining_lessons, data.group_data);
@@ -555,6 +569,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                 >${swapData.swappedHtml.group}</span>`;
                                 const swappedBadge = originalCell.querySelector('.tt-trigger');
                                 initBadgeDrag(swappedBadge);
+                                initTooltipEl(swappedBadge);
                             }
                         }
                         
@@ -576,10 +591,9 @@ document.addEventListener('DOMContentLoaded', function(){
                                 data-group-name=\"${swapData.html.group}\"
                                 data-subject-name=\"${swapData.html.subject ?? ''}\"
                         >${swapData.html.group}</span>`;
-                        if (window.bootstrap) {
-                            const badge = cell.querySelector('.tt-trigger');
-                            initBadgeDrag(badge);
-                        }
+                        const badge = cell.querySelector('.tt-trigger');
+                        initBadgeDrag(badge);
+                        initTooltipEl(badge);
                         flashMessage('Pamokos sėkmingai sukeistos', 'success');
                         return;
                     }
@@ -608,10 +622,9 @@ document.addEventListener('DOMContentLoaded', function(){
                             data-group-name=\"${data.html.group}\"
                             data-subject-name=\"${data.html.subject ?? ''}\"
                     >${data.html.group}</span>`;
-                    if (window.bootstrap) {
-                        const badge = cell.querySelector('.tt-trigger');
-                        initBadgeDrag(badge);
-                    }
+                    const badge = cell.querySelector('.tt-trigger');
+                    initBadgeDrag(badge);
+                    initTooltipEl(badge);
                     flashMessage('Pamoka perkelta', 'success');
                 } catch(err) {
                     showErrorModal('Klaida', 'Klaida siunčiant užklausą');
@@ -634,16 +647,28 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
     const menu = document.createElement('div');
     menu.id = 'lessonContextMenu';
     menu.className = 'context-menu';
+    // Inline fallback styles in case CSS fails to load
+    Object.assign(menu.style, {
+        position: 'fixed',
+        background: '#ffffff',
+        border: '2px solid #dee2e6',
+        borderRadius: '8px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+        minWidth: '280px',
+        zIndex: '2000',
+        fontSize: '14px',
+        padding: '8px 0'
+    });
     menu.innerHTML = `
-        <div class="context-menu-header">
+        <div class="context-menu-header" style="padding:12px 16px; font-weight:600; color:#212529; border-bottom:2px solid #e9ecef; background:#f8f9fa; border-radius:6px 6px 0 0; font-size:14px;">
             <i class="bi bi-gear-fill me-2"></i>${groupName}
             ${subjectName ? '<small class="ms-2 text-muted">' + subjectName + '</small>' : ''}
         </div>
-        <div class="context-menu-item" data-action="edit">
+        <div class="context-menu-item" data-action="edit" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; transition:all .15s ease; color:#212529; white-space:nowrap; border:none; background:transparent; text-align:left;">
             <i class="bi bi-pencil-square me-2"></i>Redaguoti grupės nustatymus
         </div>
-        <div class="context-menu-divider"></div>
-        <div class="context-menu-item text-danger" data-action="unschedule">
+        <div class="context-menu-divider" style="height:1px; background:#d0d0d0; margin:6px 0; border:none;"></div>
+        <div class="context-menu-item text-danger" data-action="unschedule" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; transition:all .15s ease; color:#dc3545; white-space:nowrap; border:none; background:transparent; text-align:left;">
             <i class="bi bi-arrow-left-circle me-2"></i>Perkelti į nesuplanuotų sąrašą
         </div>
     `;
@@ -689,6 +714,24 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
             } else if (action === 'unschedule') {
                 await unscheduleLesson(slotId, badgeElement);
             }
+        });
+    });
+    // Hover effects inline
+    menu.querySelectorAll('.context-menu-item').forEach(item => {
+        item.addEventListener('mouseenter', () => {
+            if (item.classList.contains('text-danger')) {
+                item.style.background = '#ffe0e0';
+                item.style.color = '#dc3545';
+            } else {
+                item.style.background = '#f0f0f0';
+                item.style.color = '#212529';
+            }
+            item.style.paddingLeft = '20px';
+        });
+        item.addEventListener('mouseleave', () => {
+            item.style.background = 'transparent';
+            item.style.color = item.classList.contains('text-danger') ? '#dc3545' : '#212529';
+            item.style.paddingLeft = '16px';
         });
     });
     
@@ -2057,8 +2100,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const b64 = el.getAttribute('data-tooltip-b64');
             const html = b64ToUtf8(b64);
             if(!html) return;
-            // Fallback plain title
-            el.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
+            // Accessibility fallback only (avoid native browser tooltip)
+            el.setAttribute('aria-label', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
             // Avoid duplicate tooltips
             const existing = bootstrap.Tooltip.getInstance(el);
             if (!existing) {
@@ -2181,7 +2224,7 @@ tbody .sticky-col-name {
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.25);
     min-width: 280px;
-    z-index: 1065;
+    z-index: 2000; /* ensure above grid badges and SimpleBar layers */
     font-size: 14px;
     padding: 8px 0;
     display: block !important;
@@ -2239,7 +2282,6 @@ tbody .sticky-col-name {
     background: #d0d0d0;
     margin: 6px 0;
     border: none;
-}
 }
 
 #teachersGrid td {

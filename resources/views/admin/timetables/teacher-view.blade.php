@@ -1027,16 +1027,28 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
     const menu = document.createElement('div');
     menu.id = 'lessonContextMenu';
     menu.className = 'context-menu';
+    // Inline fallback styles so menu renders even if CSS classes don’t apply
+    Object.assign(menu.style, {
+        position: 'fixed',
+        background: '#ffffff',
+        border: '2px solid #dee2e6',
+        borderRadius: '8px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+        minWidth: '280px',
+        zIndex: '2000',
+        fontSize: '14px',
+        padding: '8px 0'
+    });
     menu.innerHTML = `
-        <div class="context-menu-header">
+        <div class="context-menu-header" style="padding:12px 16px; font-weight:600; color:#212529; border-bottom:2px solid #e9ecef; background:#f8f9fa; border-radius:6px 6px 0 0; font-size:14px;">
             <i class="bi bi-gear-fill me-2"></i>${groupName}
             ${subjectName ? '<small class="ms-2 text-muted">' + subjectName + '</small>' : ''}
         </div>
-        <div class="context-menu-item" data-action="edit">
+        <div class="context-menu-item" data-action="edit" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; transition:all .15s ease; color:#212529; white-space:nowrap; border:none; background:transparent; text-align:left;">
             <i class="bi bi-pencil-square me-2"></i>Redaguoti grupės nustatymus
         </div>
-        <div class="context-menu-divider"></div>
-        <div class="context-menu-item text-danger" data-action="unschedule">
+        <div class="context-menu-divider" style="height:1px; background:#d0d0d0; margin:6px 0; border:none;"></div>
+        <div class="context-menu-item text-danger" data-action="unschedule" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; transition:all .15s ease; color:#dc3545; white-space:nowrap; border:none; background:transparent; text-align:left;">
             <i class="bi bi-arrow-left-circle me-2"></i>Perkelti į nesuplanuotų sąrašą
         </div>
     `;
@@ -1082,6 +1094,24 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
             } else if (action === 'unschedule') {
                 await unscheduleLesson(slotId, badgeElement);
             }
+        });
+    });
+    // Inline hover effects
+    menu.querySelectorAll('.context-menu-item').forEach(item => {
+        item.addEventListener('mouseenter', () => {
+            if (item.classList.contains('text-danger')) {
+                item.style.background = '#ffe0e0';
+                item.style.color = '#dc3545';
+            } else {
+                item.style.background = '#f0f0f0';
+                item.style.color = '#212529';
+            }
+            item.style.paddingLeft = '20px';
+        });
+        item.addEventListener('mouseleave', () => {
+            item.style.background = 'transparent';
+            item.style.color = item.classList.contains('text-danger') ? '#dc3545' : '#212529';
+            item.style.paddingLeft = '16px';
         });
     });
     
@@ -2132,11 +2162,11 @@ function setupBadgeDragDrop() {
                         const b64 = badge.getAttribute('data-tooltip-b64');
                         const html = b64 ? decodeURIComponent(Array.prototype.map.call(atob(b64), c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')) : '';
                         if(html){
-                            badge.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
+                            badge.setAttribute('aria-label', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
                             const existing = bootstrap.Tooltip.getInstance(badge);
-                            if (!existing) {
-                                new bootstrap.Tooltip(badge, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-                            }
+                            if (existing) { existing.dispose(); }
+                            const tt = new bootstrap.Tooltip(badge, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+                            badge.dataset.ttInit = '1';
                         }
                     }
                     
@@ -2291,20 +2321,24 @@ async function openEditGroupModal(groupId, buttonElement) {
 
 // Initialize Bootstrap tooltips for data-tooltip-b64
 if (window.bootstrap) {
+    if (!window.__tt_b64_init_done) {
+        window.__tt_b64_init_done = true;
     function b64ToUtf8(b64){
         try { return decodeURIComponent(Array.prototype.map.call(atob(b64), c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')); } catch(e){ return ''; }
     }
     document.querySelectorAll('[data-tooltip-b64]').forEach(function(el){
+        if (el.dataset.ttInit === '1') { return; }
         const b64 = el.getAttribute('data-tooltip-b64');
         const html = b64ToUtf8(b64);
         if(!html) return;
-        // Fallback plain title
-        el.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
+        // Accessibility fallback only (avoid native browser tooltip)
+        el.setAttribute('aria-label', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
         const existing = bootstrap.Tooltip.getInstance(el);
-        if (!existing) {
-            new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-        }
+        if (existing) { existing.dispose(); }
+        new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+        el.dataset.ttInit = '1';
     });
+    }
 }
 </script>
 <style>
@@ -2326,7 +2360,7 @@ if (window.bootstrap) {
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.25);
     min-width: 280px;
-    z-index: 1065;
+    z-index: 2000;
     font-size: 14px;
     padding: 8px 0;
     display: block !important;
