@@ -27,6 +27,12 @@
                     @endif
                 @endforeach
             </div>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <small class="text-muted">Sąrašas nepaskirstytų pamokų:</small>
+                <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#mergeUnscheduledGroupsModal" title="Sujungti grupes">
+                    <i class="bi bi-merge"></i> Sujungti grupes
+                </button>
+            </div>
             <div class="modern-table-wrapper">
                 <table class="modern-table table table-sm table-hover">
                     <thead>

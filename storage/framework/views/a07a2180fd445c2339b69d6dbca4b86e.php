@@ -256,7 +256,72 @@ function renderGroupHTML(group) {
 // Load groups on page load
 document.addEventListener('DOMContentLoaded', function() {
     loadGroups();
+    
+    // Only load unscheduled lessons if container exists
+    const container = document.getElementById('unscheduledLessonsContainer');
+    if (container) {
+        loadUnscheduledLessons();
+    }
 });
+
+// Load unscheduled lessons via AJAX
+async function loadUnscheduledLessons() {
+    const container = document.getElementById('unscheduledLessonsContainer');
+    
+    if (!container) {
+        console.warn('Unscheduled lessons container not found');
+        return;
+    }
+    
+    try {
+        const response = await fetch('<?php echo e(route("schools.timetables.unscheduled-html", [$school, $timetable])); ?>');
+        
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
+        }
+        
+        const html = await response.text();
+        container.innerHTML = html;
+        
+        // Re-initialize event listeners and Bootstrap components
+        initializeUnscheduledElements();
+        
+    } catch (err) {
+        console.error('Error loading unscheduled lessons:', err);
+        container.innerHTML = `
+            <div class="modern-card mb-4">
+                <div class="alert alert-danger mb-0">
+                    <i class="bi bi-exclamation-triangle"></i> Nepavyko užkrauti nepaskirstytų pamokų. 
+                    <button type="button" class="btn btn-sm btn-outline-danger float-end" onclick="loadUnscheduledLessons()">
+                        <i class="bi bi-arrow-clockwise"></i> Pabandyti dar kartą
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Initialize dynamically loaded unscheduled content
+function initializeUnscheduledElements() {
+    const container = document.getElementById('unscheduledLessonsContainer');
+    
+    // Initialize Bootstrap tooltips and modals
+    if (window.bootstrap) {
+        container.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+            new bootstrap.Tooltip(el);
+        });
+        
+        container.querySelectorAll('.modal').forEach(el => {
+            new bootstrap.Modal(el);
+        });
+    }
+    
+    // Re-initialize merge group checkboxes
+    container.querySelectorAll('.merge-group-checkbox').forEach(checkbox => {
+        checkbox.removeEventListener('change', window.updateSelectedLessonsCount);
+        checkbox.addEventListener('change', window.updateSelectedLessonsCount);
+    });
+}
 
 // Scroll to group function
 function scrollToGroup(groupId) {

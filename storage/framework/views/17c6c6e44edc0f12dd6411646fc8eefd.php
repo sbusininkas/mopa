@@ -213,6 +213,21 @@
     });
 })();
 
+// Tooltip helper to initialize a single element safely
+function initTooltipEl(el){
+    if (!window.bootstrap || !el) return;
+    const b64 = el.getAttribute('data-tooltip-b64');
+    if (!b64) return;
+    const html = (function(b){
+        try { return decodeURIComponent(Array.prototype.map.call(atob(b), c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')); } catch(e){ return ''; }
+    })(b64);
+    if(!html) return;
+    el.setAttribute('aria-label', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
+    const existing = bootstrap.Tooltip.getInstance(el);
+    if (existing) existing.dispose();
+    new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+}
+
 // Setup badge drag-over listeners for room conflict badges (must be OUTSIDE DOMContentLoaded)
 function setupBadgeDragDrop() {
     document.querySelectorAll('.availability-badge.bg-warning').forEach(badge => {
@@ -476,10 +491,9 @@ document.addEventListener('DOMContentLoaded', function(){
                                                 data-subject-name=\"${data.html.subject ?? ''}\"
                                         >${data.html.group}</span>`;
                     // re-init tooltip
-                    if (window.bootstrap) {
-                      const badge = cell.querySelector('.tt-trigger');
-                      initBadgeDrag(badge);
-                    }
+                                        const badge = cell.querySelector('.tt-trigger');
+                                        initBadgeDrag(badge);
+                                        initTooltipEl(badge);
                     // Update unscheduled list using backend data
                     if (data.group_id && data.remaining_lessons !== undefined && data.group_data) {
                         updateUnscheduledList(data.group_id, data.remaining_lessons, data.group_data);
@@ -555,6 +569,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                 >${swapData.swappedHtml.group}</span>`;
                                 const swappedBadge = originalCell.querySelector('.tt-trigger');
                                 initBadgeDrag(swappedBadge);
+                                initTooltipEl(swappedBadge);
                             }
                         }
                         
@@ -576,10 +591,9 @@ document.addEventListener('DOMContentLoaded', function(){
                                 data-group-name=\"${swapData.html.group}\"
                                 data-subject-name=\"${swapData.html.subject ?? ''}\"
                         >${swapData.html.group}</span>`;
-                        if (window.bootstrap) {
-                            const badge = cell.querySelector('.tt-trigger');
-                            initBadgeDrag(badge);
-                        }
+                        const badge = cell.querySelector('.tt-trigger');
+                        initBadgeDrag(badge);
+                        initTooltipEl(badge);
                         flashMessage('Pamokos sėkmingai sukeistos', 'success');
                         return;
                     }
@@ -608,10 +622,9 @@ document.addEventListener('DOMContentLoaded', function(){
                             data-group-name=\"${data.html.group}\"
                             data-subject-name=\"${data.html.subject ?? ''}\"
                     >${data.html.group}</span>`;
-                    if (window.bootstrap) {
-                        const badge = cell.querySelector('.tt-trigger');
-                        initBadgeDrag(badge);
-                    }
+                    const badge = cell.querySelector('.tt-trigger');
+                    initBadgeDrag(badge);
+                    initTooltipEl(badge);
                     flashMessage('Pamoka perkelta', 'success');
                 } catch(err) {
                     showErrorModal('Klaida', 'Klaida siunčiant užklausą');
@@ -2087,8 +2100,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const b64 = el.getAttribute('data-tooltip-b64');
             const html = b64ToUtf8(b64);
             if(!html) return;
-            // Fallback plain title
-            el.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
+            // Accessibility fallback only (avoid native browser tooltip)
+            el.setAttribute('aria-label', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
             // Avoid duplicate tooltips
             const existing = bootstrap.Tooltip.getInstance(el);
             if (!existing) {

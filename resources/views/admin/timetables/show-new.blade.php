@@ -24,7 +24,10 @@
 
     @include('admin.timetables.partials.current-settings')
 
-    @include('admin.timetables.partials.unscheduled-lessons')
+    <!-- Unscheduled lessons will be loaded via AJAX -->
+    <div id="unscheduledLessonsContainer">
+        @include('admin.timetables.partials.unscheduled-lessons-loader')
+    </div>
 
     @include('admin.timetables.partials.settings-modal')
 

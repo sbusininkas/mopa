@@ -265,6 +265,24 @@ class TimetableController extends Controller
         return response()->json(['data' => $unscheduled]);
     }
 
+    public function unscheduledHtml(School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $user = auth()->user();
+        if (!$user->isSupervisor() && !$user->isSchoolAdmin($school->id)) {
+            abort(403);
+        }
+        
+        // Render the unscheduled lessons partial
+        $html = view('admin.timetables.partials.unscheduled-lessons', [
+            'school' => $school,
+            'timetable' => $timetable,
+        ])->render();
+        
+        return response($html, 200, ['Content-Type' => 'text/html; charset=UTF-8']);
+    }
+
     public function storeManualSlot(Request $request, School $school, Timetable $timetable)
     {
         abort_unless($timetable->school_id === $school->id, 404);
@@ -612,61 +630,22 @@ class TimetableController extends Controller
             'copy_group_id' => $newGroup->id,
         ]);
         
-        // Update generation_report (decrement remaining) - account for copies
-        $report = $timetable->generation_report ?? [];
-        if (isset($report['unscheduled'])) {
-            // Get all related group IDs (original + all copies)
-            $allRelatedIds = $trueOriginalGroup->getAllRelatedGroupIds();
-            
-            $originalEntryFound = false;
-            
-            // Update remaining_lessons for original group entry - subtract the lessons moved to copy
-            foreach ($report['unscheduled'] as &$u) {
-                if (in_array($u['group_id'] ?? null, $allRelatedIds)) {
-                    if ($u['group_id'] == $trueOriginalGroup->id) {
-                        $originalEntryFound = true;
-                        // Subtract all lessons assigned to new group (R_o - N)
-                        $u['remaining_lessons'] = max(0, ($u['remaining_lessons'] ?? 0) - $newGroupLessons);
-                    }
+        // NO NEED TO MANUALLY UPDATE generation_report
+        // The unscheduled list will be recalculated by fixUnscheduledRemainingLessons
+        // based on the new group structure (original + copy, slots)
+        // when the page is reloaded or when the API is called
+        
+        // Get updated unscheduled list after copy creation
+        $updatedUnscheduled = [];
+        if (is_array($timetable->generation_report) && isset($timetable->generation_report['unscheduled'])) {
+            foreach ($timetable->generation_report['unscheduled'] as $u) {
+                if (($u['remaining_lessons'] ?? 0) > 0) { 
+                    $updatedUnscheduled[] = $u; 
                 }
             }
-            unset($u);
-            
-            // Add new entry for the new copy group with remaining lessons
-            // New group has $newGroupLessons total, we inserted 1, so remaining = $newGroupLessons - 1
-            $newGroupRemaining = $newGroupLessons - 1;
-            if ($newGroupRemaining > 0) {
-                $report['unscheduled'][] = [
-                    'group_id' => $newGroup->id,
-                    'group_name' => $newGroup->name,
-                    'subject_id' => $newGroup->subject_id,
-                    'subject_name' => $newGroup->subject->name ?? '—',
-                    'teacher_login_key_id' => $newGroup->teacher_login_key_id,
-                    'teacher_name' => $newGroup->teacherLoginKey->user->full_name ?? '—',
-                    'room_id' => $newGroup->room_id,
-                    'room_number' => $newGroup->room->number ?? null,
-                    'room_name' => $newGroup->room->name ?? null,
-                    'total_lessons' => $newGroupLessons,
-                    'remaining_lessons' => $newGroupRemaining,
-                    'requested_lessons' => $newGroupLessons,
-                    'reasons' => [],
-                    'reasons_translated' => [],
-                ];
-            }
-            
-            // Recalculate counts
-            $report['unscheduled_units'] = 0;
-            $filtered = [];
-            foreach ($report['unscheduled'] as $entry) {
-                $report['unscheduled_units'] += $entry['remaining_lessons'] ?? 0;
-                if (($entry['remaining_lessons'] ?? 0) > 0) { 
-                    $filtered[] = $entry; 
-                }
-            }
-            $report['unscheduled'] = $filtered;
-            $report['unscheduled_count'] = count($filtered);
-            $timetable->update(['generation_report' => $report]);
         }
+        // Fix remaining_lessons accounting for group copies - this recalculates everything
+        $updatedUnscheduled = $this->fixUnscheduledRemainingLessons($timetable, $updatedUnscheduled);
         
         // Return success with updated data
         return response()->json([
@@ -685,6 +664,7 @@ class TimetableController extends Controller
                 'room_number' => $trueOriginalGroup->room->number ?? null,
                 'room_name' => $trueOriginalGroup->room->name ?? null,
             ],
+            'unscheduled' => $updatedUnscheduled,
         ]);
     }
 
@@ -758,15 +738,9 @@ class TimetableController extends Controller
                 ->whereIn('timetable_group_id', $relatedGroupIds)
                 ->count();
             
-            // Total lessons should be from the original group's lessons_per_week
-            // Find the original group
-            $originalGroup = $group;
-            $copyRelation = \App\Models\TimetableGroupCopy::where('copy_group_id', $group->id)->first();
-            if ($copyRelation) {
-                $originalGroup = $timetable->groups()->find($copyRelation->original_group_id);
-            }
-            
-            $totalLessons = $originalGroup ? ($originalGroup->lessons_per_week ?? 0) : ($group->lessons_per_week ?? 0);
+            // Sum total lessons from all related groups (original + all copies)
+            $relatedGroups = $timetable->groups()->whereIn('id', $relatedGroupIds)->get();
+            $totalLessons = $relatedGroups->sum('lessons_per_week');
             $remainingLessons = max(0, $totalLessons - $scheduledCount);
             
             // Only include if there are remaining lessons
@@ -1700,6 +1674,144 @@ class TimetableController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Mokytojo darbo dienos atnaujintos',
+        ]);
+    }
+
+    public function mergeUnscheduledGroups(Request $request, School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $user = auth()->user();
+        if (!$user->isSupervisor() && !$user->isSchoolAdmin($school->id)) {
+            abort(403);
+        }
+        
+        $validated = $request->validate([
+            'group_ids' => 'required|array|min:2',
+            'group_ids.*' => 'integer',
+            'room_id' => 'required|integer',
+            'group_name' => 'nullable|string',
+        ]);
+        
+        // Verify all groups belong to this timetable
+        $groups = $timetable->groups()
+            ->whereIn('id', $validated['group_ids'])
+            ->with(['subject', 'teacherLoginKey', 'students', 'room'])
+            ->get();
+            
+        if ($groups->count() < 2) {
+            return response()->json(['error' => 'Reikia bent 2 grupių sujungti'], 422);
+        }
+        
+        // Verify they all match by subject, teacher, and students
+        $firstGroup = $groups->first();
+        foreach ($groups as $group) {
+            if ($group->subject_id !== $firstGroup->subject_id) {
+                return response()->json(['error' => 'Visos grupės turi turėti tą patį dalykį'], 422);
+            }
+            if ($group->teacher_login_key_id !== $firstGroup->teacher_login_key_id) {
+                return response()->json(['error' => 'Visos grupės turi turėti tą patį mokytoją'], 422);
+            }
+            
+            // Compare student IDs (explicit table to avoid ambiguity)
+            $groupStudentIds = $group->students()->pluck('login_keys.id')->sort()->values()->toArray();
+            $firstStudentIds = $firstGroup->students()->pluck('login_keys.id')->sort()->values()->toArray();
+            if ($groupStudentIds !== $firstStudentIds) {
+                return response()->json(['error' => 'Visos grupės turi turėti tuos pačius mokinius'], 422);
+            }
+        }
+        
+        // Verify new room exists
+        $newRoom = \App\Models\Room::where('id', $validated['room_id'])
+            ->where('school_id', $school->id)
+            ->first();
+            
+        if (!$newRoom) {
+            return response()->json(['error' => 'Kabinetas nerastas'], 404);
+        }
+        
+        // Create merged group with sum of requested lessons (lessons_per_week)
+        $totalRequestedLessons = $groups->sum('lessons_per_week');
+        $mergedGroupName = $validated['group_name'] ?? $firstGroup->name;
+        
+        $mergedGroup = $timetable->groups()->create([
+            'name' => $mergedGroupName,
+            'subject_id' => $firstGroup->subject_id,
+            'teacher_login_key_id' => $firstGroup->teacher_login_key_id,
+            'room_id' => $newRoom->id,
+            'week_type' => $firstGroup->week_type,
+            'lessons_per_week' => $totalRequestedLessons,
+            'is_priority' => $firstGroup->is_priority,
+        ]);
+        
+        // Copy students from first group
+        $studentIds = $firstGroup->students()->pluck('login_keys.id')->toArray();
+        $mergedGroup->students()->sync($studentIds);
+        
+        // Update generation_report - replace old group entries with merged one
+        $report = $timetable->generation_report ?? [];
+        
+        if (isset($report['unscheduled'])) {
+            // Remove entries for merged groups, add entry for merged group
+            $unscheduledCollection = collect($report['unscheduled']);
+            $selectedEntries = $unscheduledCollection->whereIn('group_id', $validated['group_ids']);
+            // Calculate remaining lessons from previous entries, and requested from lessons_per_week/ requested if present
+            $sumRemaining = (int) $selectedEntries->sum(function ($u) {
+                return (int) ($u['remaining_lessons'] ?? 0);
+            });
+            $sumRequested = (int) $selectedEntries->sum(function ($u) {
+                return (int) ($u['requested_lessons'] ?? ($u['lessons_per_week'] ?? ($u['total_lessons'] ?? 0)));
+            });
+            // Filter out merged group entries
+            $report['unscheduled'] = $unscheduledCollection
+                ->filter(fn($u) => !in_array($u['group_id'] ?? null, $validated['group_ids']))
+                ->values()
+                ->toArray();
+            
+            // Add merged group entry
+            $teacherName = optional($mergedGroup->teacherLoginKey?->user)->full_name
+                ?? ($mergedGroup->teacherLoginKey->full_name ?? '—');
+            $report['unscheduled'][] = [
+                'group_id' => $mergedGroup->id,
+                'group_name' => $mergedGroup->name,
+                'subject_id' => $mergedGroup->subject_id,
+                'subject_name' => $mergedGroup->subject->name ?? '—',
+                'teacher_login_key_id' => $mergedGroup->teacher_login_key_id,
+                'teacher_name' => $teacherName,
+                'room_id' => $mergedGroup->room_id,
+                'room_number' => $mergedGroup->room->number ?? null,
+                'room_name' => $mergedGroup->room->name ?? null,
+                'total_lessons' => $sumRequested,
+                'remaining_lessons' => $sumRemaining,
+                'requested_lessons' => $sumRequested,
+                'reasons' => [],
+                'reasons_translated' => [],
+            ];
+            
+            // Recalculate counts
+            $report['unscheduled_units'] = 0;
+            $filtered = [];
+            foreach ($report['unscheduled'] as $entry) {
+                if (($entry['remaining_lessons'] ?? 0) > 0) {
+                    $report['unscheduled_units'] += $entry['remaining_lessons'] ?? 0;
+                    $filtered[] = $entry;
+                }
+            }
+            $report['unscheduled'] = $filtered;
+            $report['unscheduled_count'] = count($filtered);
+        }
+        
+        $timetable->update(['generation_report' => $report]);
+        
+        // Delete old groups
+        $timetable->groups()->whereIn('id', $validated['group_ids'])->delete();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Grupės sėkmingai sujungtos',
+            'merged_group_id' => $mergedGroup->id,
+            'merged_group_name' => $mergedGroup->name,
+            'total_lessons' => $totalRequestedLessons,
         ]);
     }
 

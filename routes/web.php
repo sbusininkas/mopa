@@ -130,6 +130,7 @@ Route::middleware(['auth', 'school.admin.or.supervisor'])->group(function () {
         ->whereNumber('teacher')
         ->name('schools.timetables.teacher');
     Route::get('/admin/schools/{school}/timetables/{timetable}/unscheduled', [\App\Http\Controllers\TimetableController::class, 'unscheduled'])->name('schools.timetables.unscheduled');
+    Route::get('/admin/schools/{school}/timetables/{timetable}/unscheduled-html', [\App\Http\Controllers\TimetableController::class, 'unscheduledHtml'])->name('schools.timetables.unscheduled-html');
     Route::post('/admin/schools/{school}/timetables/{timetable}/check-conflict', [\App\Http\Controllers\TimetableController::class, 'checkConflict'])->name('schools.timetables.check-conflict');
     Route::post('/admin/schools/{school}/timetables/{timetable}/manual-slot', [\App\Http\Controllers\TimetableController::class, 'storeManualSlot'])->name('schools.timetables.manual-slot');
     Route::post('/admin/schools/{school}/timetables/{timetable}/manual-slot-alt-room', [\App\Http\Controllers\TimetableController::class, 'storeManualSlotWithAlternativeRoom'])->name('schools.timetables.manual-slot-alt-room');
@@ -140,6 +141,7 @@ Route::middleware(['auth', 'school.admin.or.supervisor'])->group(function () {
     Route::post('/admin/schools/{school}/timetables/{timetable}/update', [\App\Http\Controllers\TimetableController::class, 'update'])->name('schools.timetables.update');
     Route::post('/admin/schools/{school}/timetables/{timetable}/set-public', [\App\Http\Controllers\TimetableController::class, 'setPublic'])->name('schools.timetables.set-public');
     Route::post('/admin/schools/{school}/timetables/{timetable}/copy', [\App\Http\Controllers\TimetableController::class, 'copy'])->name('schools.timetables.copy');
+    Route::post('/admin/schools/{school}/timetables/{timetable}/merge-unscheduled-groups', [\App\Http\Controllers\TimetableController::class, 'mergeUnscheduledGroups'])->name('schools.timetables.merge-unscheduled-groups');
     Route::delete('/admin/schools/{school}/timetables/{timetable}', [\App\Http\Controllers\TimetableController::class, 'destroy'])->name('schools.timetables.destroy');
     
     // Teacher working days
