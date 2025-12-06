@@ -127,13 +127,14 @@
                                                     $tooltipB64 = base64_encode($tooltipHtml);
                                                 ?>
                                                 <span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" data-tooltip-b64="<?php echo e($tooltipB64); ?>" draggable="true"
-                                                    if (draggedKind === 'unscheduled') {
-                                                        let scheduled=false;
                                                       data-slot-id="<?php echo e($cell['slot_id']); ?>"
                                                       data-group-id="<?php echo e($cell['group_id']); ?>"
                                                       data-teacher-id="<?php echo e($cell['teacher_id']); ?>"
                                                       data-group-name="<?php echo e($cell['group']); ?>"
                                                       data-subject-name="<?php echo e($cell['subject'] ?? ''); ?>"
+                                                      data-student-count="<?php echo e($cell['student_count'] ?? 0); ?>"
+                                                      data-room-number="<?php echo e($cell['room_number'] ?? ''); ?>"
+                                                      data-teacher-name="<?php echo e($cell['teacher_name'] ?? ''); ?>"
                                                 ><?php echo e($cell['group']); ?></span>
                                             <?php else: ?>
                                                 <span class="text-muted">—</span>
@@ -252,18 +253,27 @@ document.addEventListener('DOMContentLoaded', function(){
         
 
         
-        // Also add click to select
+        // Also add click to highlight all cells of same group and show info
         el.addEventListener('click', e => {
-            if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                // Toggle selection
-                if (el.classList.contains('lesson-selected')) {
-                    el.classList.remove('lesson-selected');
-                } else {
-                    document.querySelectorAll('.lesson-selected').forEach(sel => sel.classList.remove('lesson-selected'));
-                    el.classList.add('lesson-selected');
-                }
-            }
+            const groupName = el.dataset.groupName;
+            const groupId = el.dataset.groupId;
+            if (!groupName) return;
+            
+            // Remove previous highlights
+            document.querySelectorAll('.group-highlighted').forEach(el => el.classList.remove('group-highlighted'));
+            document.querySelectorAll('.group-cell-highlighted').forEach(cell => cell.classList.remove('group-cell-highlighted'));
+            
+            // Highlight all cells with this group
+            let scheduledCount = 0;
+            document.querySelectorAll(`.tt-trigger[data-group-name="${groupName}"]`).forEach(badge => {
+                badge.classList.add('group-highlighted');
+                scheduledCount++;
+                const cell = badge.closest('.lesson-col');
+                if (cell) cell.classList.add('group-cell-highlighted');
+            });
+            
+            // Show group info notification
+            showGroupInfo(groupName, groupId, scheduledCount);
         });
     }
     document.querySelectorAll('.tt-trigger[draggable="true"]').forEach(initBadgeDrag);
@@ -505,6 +515,58 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // Global functions - outside DOMContentLoaded for onclick access
+
+// Show group info notification with statistics
+function showGroupInfo(groupName, groupId, scheduledCount) {
+    // Get unscheduled count from unscheduled panel
+    const unscheduledItem = document.querySelector(`.unscheduled-item[data-group-id="${groupId}"]`);
+    let unscheduledCount = 0;
+    let studentCount = 0;
+    let roomNumbers = new Set();
+    let subjectName = '';
+    let teacherName = '';
+    
+    if (unscheduledItem) {
+        const remainingBadge = unscheduledItem.querySelector('.remaining-badge');
+        if (remainingBadge) {
+            unscheduledCount = parseInt(remainingBadge.textContent) || 0;
+        }
+    }
+    
+    // Get details from all badges with this group name and ID
+    document.querySelectorAll(`.tt-trigger[data-group-name="${groupName}"][data-group-id="${groupId}"]`).forEach(badge => {
+        const count = parseInt(badge.dataset.studentCount) || 0;
+        if (count > 0 && studentCount === 0) studentCount = count;
+        
+        const roomNum = badge.dataset.roomNumber;
+        if (roomNum) roomNumbers.add(roomNum);
+        
+        if (!subjectName && badge.dataset.subjectName) {
+            subjectName = badge.dataset.subjectName;
+        }
+        
+        if (!teacherName && badge.dataset.teacherName) {
+            teacherName = badge.dataset.teacherName;
+        }
+    });
+    
+    const totalLessons = scheduledCount + unscheduledCount;
+    const roomsDisplay = roomNumbers.size > 0 ? Array.from(roomNumbers).join(', ') : '—';
+    
+    // Update notification
+    document.getElementById('groupInfoName').textContent = groupName;
+    document.getElementById('groupInfoSubject').textContent = subjectName || '—';
+    document.getElementById('groupInfoTeacher').textContent = teacherName || '—';
+    document.getElementById('groupInfoRooms').textContent = roomsDisplay;
+    document.getElementById('groupInfoStudents').textContent = studentCount > 0 ? studentCount : '—';
+    document.getElementById('groupInfoScheduled').textContent = scheduledCount;
+    document.getElementById('groupInfoUnscheduled').textContent = unscheduledCount;
+    document.getElementById('groupInfoTotal').textContent = totalLessons;
+    
+    // Show notification
+    document.getElementById('groupInfoNotification').style.display = 'block';
+}
+
 function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeElement) {
     // Remove any existing context menu
     const existingMenu = document.getElementById('lessonContextMenu');
@@ -1995,7 +2057,117 @@ tbody .sticky-col-name {
     border: 2px dashed #198754 !important;
 }
 
+/* Group highlighting in teachers view */
+.tt-trigger.group-highlighted {
+    background-color: #0d6efd !important;
+    color: white !important;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.3);
+}
+
+.lesson-col.group-cell-highlighted {
+    background-color: #cfe2ff;
+    outline: 2px dashed #0d6efd;
+    outline-offset: -1px;
+}
+
+/* Group info notification */
+.group-info-notification {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: white;
+    border: 2px solid #0d6efd;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    padding: 0;
+    min-width: 280px;
+    z-index: 1000;
+    font-size: 14px;
+}
+
+.group-info-close {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    cursor: pointer;
+    color: #6c757d;
+    font-size: 18px;
+    line-height: 1;
+    font-weight: bold;
+}
+
+.group-info-close:hover {
+    color: #212529;
+}
+
+.group-info-content {
+    padding: 12px 16px;
+}
+
+.group-info-content h6 {
+    margin: 0 0 12px 0;
+    color: #0d6efd;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.group-info-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    color: #495057;
+}
+
+.group-info-stat .label {
+    font-weight: 500;
+}
+
+.group-info-stat .value {
+    color: #212529;
+    font-weight: 600;
+}
+
 </style>
+
+<!-- Group Info Notification -->
+<div id="groupInfoNotification" class="group-info-notification" style="display: none;">
+    <div class="group-info-close" onclick="document.getElementById('groupInfoNotification').style.display='none';">✕</div>
+    <div class="group-info-content">
+        <h6 id="groupInfoName"></h6>
+        <div class="group-info-stat">
+            <span class="label">Dalykas:</span>
+            <span id="groupInfoSubject" class="value">—</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Mokytojas:</span>
+            <span id="groupInfoTeacher" class="value">—</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Kabinetai:</span>
+            <span id="groupInfoRooms" class="value">—</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Mokiniai:</span>
+            <span id="groupInfoStudents" class="value">0</span>
+        </div>
+        <div class="group-info-stat" style="border-top: 1px solid #dee2e6; padding-top: 8px; margin-top: 8px;">
+            <span class="label">Suplanuota:</span>
+            <span id="groupInfoScheduled" class="value">0</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Nesuplanuota:</span>
+            <span id="groupInfoUnscheduled" class="value">0</span>
+        </div>
+        <div class="group-info-stat" style="border-top: 1px solid #dee2e6; padding-top: 8px; margin-top: 8px;">
+            <span class="label">Iš viso:</span>
+            <span id="groupInfoTotal" class="value" style="font-weight: bold; color: #0d6efd;">0</span>
+        </div>
+    </div>
+</div>
+
 <?php $__env->stopSection(); ?>
+
+
 
 <?php echo $__env->make('layouts.admin', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH C:\Users\herom\Desktop\Projektai\mopa\resources\views/admin/timetables/teachers-view.blade.php ENDPATH**/ ?>

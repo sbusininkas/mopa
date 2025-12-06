@@ -147,6 +147,7 @@ class TimetableController extends Controller
                 'room_name' => $g->room?->name,
                 'teacher_id' => $tid,
                 'teacher_name' => $g->teacherLoginKey?->full_name,
+                'student_count' => $g->students()->count(),
             ];
         }
 
@@ -209,7 +210,7 @@ class TimetableController extends Controller
         // Pull all slots for this teacher
         $slots = $timetable->slots()
             ->whereHas('group', function($q) use ($teacher){ $q->where('teacher_login_key_id', $teacher); })
-            ->with(['group.subject','group.room'])
+            ->with(['group.subject','group.room','group.students'])
             ->get();
 
         foreach ($slots as $s) {
@@ -221,7 +222,11 @@ class TimetableController extends Controller
                 'group' => $g->name,
                 'subject' => $g->subject?->name,
                 'room' => $g->room?->number ? ($g->room->number.' '.$g->room->name) : null,
+                'room_number' => $g->room?->number,
+                'room_name' => $g->room?->name,
                 'teacher_id' => $teacher,
+                'teacher_name' => $teacherModel->full_name,
+                'student_count' => $g->students()->count(),
             ];
         }
 

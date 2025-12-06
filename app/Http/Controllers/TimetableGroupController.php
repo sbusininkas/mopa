@@ -104,11 +104,11 @@ class TimetableGroupController extends Controller
             'room_id' => 'nullable|exists:rooms,id',
             'week_type' => 'required|in:all,even,odd',
             'lessons_per_week' => 'required|integer|min:1|max:20',
-            'is_priority' => 'nullable|boolean',
+            'is_priority' => 'nullable|in:on,true,1',
             'student_ids' => 'nullable|array',
             'student_ids.*' => 'exists:login_keys,id',
         ]);
-        $validated['is_priority'] = $request->has('is_priority');
+        $validated['is_priority'] = $request->has('is_priority') ? true : false;
         
         // Update group
         $group->update(collect($validated)->except(['student_ids'])->toArray());

@@ -14,114 +14,151 @@
         </div>
     </div>
 
-    <div class="row g-3">
-        <div class="col-md-9">
-            <div class="card">
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-bordered align-middle mb-0" id="teacherGrid" data-teacher-id="{{ $teacher->id }}">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th style="width:60px" class="text-center">#</th>
-                                    @foreach($days as $code => $label)
-                                        <th class="text-center">{{ $label }}</th>
-                                    @endforeach
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @for($row=1; $row <= $maxRows; $row++)
-                                    <tr>
-                                        <td class="text-center fw-bold sticky-col-row">{{ $row }}</td>
-                                        @foreach($days as $code => $label)
-                                            @php 
-                                                $cell = $grid[$row][$code] ?? null;
-                                                if ($cell) {
-                                                    $subject = $cell['subject'] ?? '—';
-                                                    $roomNumber = $cell['room_number'] ?? null;
-                                                    $roomName = $cell['room_name'] ?? null;
-                                                    $roomDisplay = $roomNumber ? ($roomNumber . ($roomName ? ' ' . $roomName : '')) : '—';
-                                                    $dayLabel = $label;
-                                                    $lessonNr = $row;
-                                                    $teacherName = $teacher->full_name ?? '—';
-                                                    // Tooltip su visa informacija
-                                                    $tooltipHtml = '<div class="tt-inner">'
-                                                        .'<div class="tt-row tt-row-head"><i class="bi bi-clock-history tt-ico"></i><span class="tt-val">'.e($dayLabel).' • '.e($lessonNr).' pamoka</span></div>'
-                                                        .'<div class="tt-divider"></div>'
-                                                        .'<div class="tt-row"><i class="bi bi-collection-fill tt-ico"></i><span class="tt-val">'.e($cell['group']).'</span></div>'
-                                                        .'<div class="tt-row"><i class="bi bi-book-half tt-ico"></i><span class="tt-val">'.e($subject).'</span></div>'
-                                                        .'<div class="tt-row"><i class="bi bi-door-closed tt-ico"></i><span class="tt-val">'.e($roomDisplay).'</span></div>'
-                                                        .'<div class="tt-row"><i class="bi bi-person-badge tt-ico"></i><span class="tt-val">'.e($teacherName).'</span></div>'
-                                                    .'</div>';
-                                                    $tooltipB64 = base64_encode($tooltipHtml);
-                                                }
-                                            @endphp
-                                            <td class="text-center lesson-col drop-target timetable-cell" style="min-width:220px" data-day="{{ $code }}" data-slot="{{ $row }}" data-teacher-id="{{ $teacher->id }}">
-                                                @if($cell)
-                                                    <span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" draggable="true"
-                                                        data-tooltip-b64="{{ $tooltipB64 }}"
-                                                        data-kind="scheduled"
-                                                        data-slot-id="{{ $cell['slot_id'] }}"
-                                                        data-group-id="{{ $cell['group_id'] }}"
-                                                        data-teacher-id="{{ $teacher->id }}"
-                                                        data-group-name="{{ $cell['group'] }}"
-                                                        data-subject-name="{{ $cell['subject'] ?? '' }}"
-                                                    >{{ $cell['group'] }}</span>
-                                                @else
-                                                    <span class="text-muted">—</span>
-                                                @endif
-                                            </td>
-                                        @endforeach
-                                    </tr>
-                                @endfor
-                            </tbody>
-                        </table>
+    <!-- Nesuplanuotų pamokų panelė VIRŠ lentelės -->
+    <div class="card mb-3" id="unscheduledPanel">
+        <div class="card-header p-2"><strong>Nesuplanuotos grupės (šiam mokytojui)</strong></div>
+        <div class="card-body p-2" style="max-height: 150px; overflow:auto;">
+            @forelse(($unscheduled ?? []) as $u)
+                <div class="unscheduled-item mb-1 d-flex align-items-center" draggable="true"
+                     data-kind="unscheduled"
+                     data-group-id="{{ $u['group_id'] }}"
+                     data-group-name="{{ $u['group_name'] ?? $u['group'] ?? '' }}"
+                     data-subject-name="{{ $u['subject_name'] ?? $u['subject'] ?? '' }}"
+                     data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
+                     data-teacher-name="{{ $u['teacher_name'] ?? $u['teacher'] ?? '' }}"
+                     data-remaining="{{ $u['remaining_lessons'] }}">
+                    <div class="flex-grow-1">
+                        <div class="unscheduled-title">
+                            {{ $u['group_name'] ?? $u['group'] ?? 'Grupė' }}
+                            <span class="badge bg-primary ms-2 remaining-badge">{{ $u['remaining_lessons'] }}</span>
+                        </div>
+                        <div class="unscheduled-meta">
+                            <span class="unscheduled-subject">{{ $u['subject_name'] ?? $u['subject'] ?? '' }}</span>
+                        </div>
+                    </div>
+                    <div class="ms-2">
+                        <button type="button" class="btn btn-outline-info btn-sm" 
+                                onclick="findAvailableSlots({{ $u['group_id'] }}, '{{ addslashes($u['group_name'] ?? $u['group'] ?? '') }}', '{{ addslashes($u['subject_name'] ?? $u['subject'] ?? '') }}', {{ $u['teacher_login_key_id'] ?? 'null' }})"
+                                title="Rasti laisvus langelius">
+                            <i class="bi bi-search"></i>
+                        </button>
                     </div>
                 </div>
-            </div>
+            @empty
+                <span class="text-muted small">Nėra neužpildytų pamokų šiam mokytojui</span>
+            @endforelse
         </div>
-        <div class="col-md-3">
-            <div class="card h-100" id="unscheduledPanel">
-                <div class="card-header p-2"><strong>Nesuplanuotos (šiam mokytojui)</strong></div>
-                <div class="card-body p-2" style="max-height:60vh; overflow:auto;">
-                    @forelse(($unscheduled ?? []) as $u)
-                        <div class="unscheduled-item mb-1 d-flex align-items-center" draggable="true"
-                             data-kind="unscheduled"
-                             data-group-id="{{ $u['group_id'] }}"
-                             data-group-name="{{ $u['group_name'] ?? $u['group'] ?? '' }}"
-                             data-subject-name="{{ $u['subject_name'] ?? $u['subject'] ?? '' }}"
-                             data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
-                             data-teacher-name="{{ $u['teacher_name'] ?? $u['teacher'] ?? '' }}"
-                             data-remaining="{{ $u['remaining_lessons'] }}">
-                            <div class="flex-grow-1">
-                                <div class="unscheduled-title">
-                                    {{ $u['group_name'] ?? $u['group'] ?? 'Grupė' }}
-                                    <span class="badge bg-primary ms-2 remaining-badge">{{ $u['remaining_lessons'] }}</span>
-                                </div>
-                                <div class="unscheduled-meta">
-                                    <span class="unscheduled-subject">{{ $u['subject_name'] ?? $u['subject'] ?? '' }}</span>
-                                </div>
-                            </div>
-                            <div class="ms-2">
-                                <button type="button" class="btn btn-outline-info btn-sm" 
-                                        onclick="findAvailableSlots({{ $u['group_id'] }}, '{{ addslashes($u['group_name'] ?? $u['group'] ?? '') }}', '{{ addslashes($u['subject_name'] ?? $u['subject'] ?? '') }}', {{ $u['teacher_login_key_id'] ?? 'null' }})"
-                                        title="Rasti laisvus langelius">
-                                    <i class="bi bi-search"></i>
-                                </button>
-                            </div>
-                        </div>
-                    @empty
-                        <span class="text-muted small">Nėra neužpildytų pamokų šiam mokytojui</span>
-                    @endforelse
-                </div>
-                <div class="card-footer d-flex justify-content-between align-items-center p-1 small text-muted">
-                    <span>Tempkite ant pasirinktų langelių</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAvailabilityMarks()" title="Išvalyti žymėjimus">Išvalyti</button>
-                </div>
+        <div class="card-footer d-flex justify-content-between align-items-center p-1 small text-muted">
+            <span>Tempkite ant pasirinktų langelių</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAvailabilityMarks()" title="Išvalyti žymėjimus">Išvalyti</button>
+        </div>
+    </div>
+
+    <!-- Tvarkaraščio lentelė - pilna plotis -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle mb-0" id="teacherGrid" data-teacher-id="{{ $teacher->id }}">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:60px" class="text-center">#</th>
+                            @foreach($days as $code => $label)
+                                <th class="text-center">{{ $label }}</th>
+                            @endforeach
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for($row=1; $row <= $maxRows; $row++)
+                            <tr>
+                                <td class="text-center fw-bold sticky-col-row">{{ $row }}</td>
+                                @foreach($days as $code => $label)
+                                    @php 
+                                        $cell = $grid[$row][$code] ?? null;
+                                        if ($cell) {
+                                            $subject = $cell['subject'] ?? '—';
+                                            $roomNumber = $cell['room_number'] ?? null;
+                                            $roomName = $cell['room_name'] ?? null;
+                                            $roomDisplay = $roomNumber ? ($roomNumber . ($roomName ? ' ' . $roomName : '')) : '—';
+                                            $dayLabel = $label;
+                                            $lessonNr = $row;
+                                            $teacherName = $teacher->full_name ?? '—';
+                                            // Tooltip su visa informacija
+                                            $tooltipHtml = '<div class="tt-inner">'
+                                                .'<div class="tt-row tt-row-head"><i class="bi bi-clock-history tt-ico"></i><span class="tt-val">'.e($dayLabel).' • '.e($lessonNr).' pamoka</span></div>'
+                                                .'<div class="tt-divider"></div>'
+                                                .'<div class="tt-row"><i class="bi bi-collection-fill tt-ico"></i><span class="tt-val">'.e($cell['group']).'</span></div>'
+                                                .'<div class="tt-row"><i class="bi bi-book-half tt-ico"></i><span class="tt-val">'.e($subject).'</span></div>'
+                                                .'<div class="tt-row"><i class="bi bi-door-closed tt-ico"></i><span class="tt-val">'.e($roomDisplay).'</span></div>'
+                                                .'<div class="tt-row"><i class="bi bi-person-badge tt-ico"></i><span class="tt-val">'.e($teacherName).'</span></div>'
+                                            .'</div>';
+                                            $tooltipB64 = base64_encode($tooltipHtml);
+                                        }
+                                    @endphp
+                                    <td class="text-center lesson-col drop-target timetable-cell" style="min-width:220px" data-day="{{ $code }}" data-slot="{{ $row }}" data-teacher-id="{{ $teacher->id }}">
+                                        @if($cell)
+                                            <span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" draggable="true"
+                                                data-tooltip-b64="{{ $tooltipB64 }}"
+                                                data-kind="scheduled"
+                                                data-slot-id="{{ $cell['slot_id'] }}"
+                                                data-group-id="{{ $cell['group_id'] }}"
+                                                data-teacher-id="{{ $teacher->id }}"
+                                                data-group-name="{{ $cell['group'] }}"
+                                                data-subject-name="{{ $cell['subject'] ?? '' }}"
+                                                data-student-count="{{ $cell['student_count'] ?? 0 }}"
+                                                data-room-number="{{ $cell['room_number'] ?? '' }}"
+                                                data-teacher-name="{{ $cell['teacher_name'] ?? '' }}"
+                                            >{{ $cell['group'] }}</span>
+                                        @else
+                                            <span class="text-muted">—</span>
+                                        @endif
+                                    </td>
+                                @endforeach
+                            </tr>
+                        @endfor
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
+
 @endsection
+
+<!-- Group Info Notification Panel -->
+<div id="groupInfoNotification" class="group-info-notification" style="display: none;">
+    <div class="group-info-close" onclick="document.getElementById('groupInfoNotification').style.display='none';">✕</div>
+    <div class="group-info-content">
+        <h6 id="groupInfoName"></h6>
+        <div class="group-info-stat">
+            <span class="label">Dalykas:</span>
+            <span id="groupInfoSubject" class="value">—</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Mokytojas:</span>
+            <span id="groupInfoTeacher" class="value">—</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Kabinetai:</span>
+            <span id="groupInfoRooms" class="value">—</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Mokiniai:</span>
+            <span id="groupInfoStudents" class="value">0</span>
+        </div>
+        <div class="group-info-stat" style="border-top: 1px solid #dee2e6; padding-top: 8px; margin-top: 8px;">
+            <span class="label">Suplanuota:</span>
+            <span id="groupInfoScheduled" class="value">0</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Nesuplanuota:</span>
+            <span id="groupInfoUnscheduled" class="value">0</span>
+        </div>
+        <div class="group-info-stat" style="border-top: 1px solid #dee2e6; padding-top: 8px; margin-top: 8px;">
+            <span class="label">Iš viso:</span>
+            <span id="groupInfoTotal" class="value" style="font-weight: bold; color: #0d6efd;">0</span>
+        </div>
+    </div>
+</div>
 
 @push('scripts')
 <script>
@@ -164,18 +201,27 @@ document.addEventListener('DOMContentLoaded', function(){
             showContextMenu(e, slotId, groupId, groupName, subjectName, el);
         });
         
-        // Also add click to select
+        // Click to highlight all cells of same group and show info
         el.addEventListener('click', e => {
-            if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                // Toggle selection
-                if (el.classList.contains('lesson-selected')) {
-                    el.classList.remove('lesson-selected');
-                } else {
-                    document.querySelectorAll('.lesson-selected').forEach(sel => sel.classList.remove('lesson-selected'));
-                    el.classList.add('lesson-selected');
-                }
-            }
+            const groupName = el.dataset.groupName;
+            const groupId = el.dataset.groupId;
+            if (!groupName) return;
+            
+            // Remove previous highlights
+            document.querySelectorAll('.group-highlighted').forEach(el => el.classList.remove('group-highlighted'));
+            document.querySelectorAll('.group-cell-highlighted').forEach(cell => cell.classList.remove('group-cell-highlighted'));
+            
+            // Highlight all cells with this group
+            let scheduledCount = 0;
+            document.querySelectorAll(`.tt-trigger[data-group-name="${groupName}"]`).forEach(badge => {
+                badge.classList.add('group-highlighted');
+                scheduledCount++;
+                const cell = badge.closest('.timetable-cell');
+                if (cell) cell.classList.add('group-cell-highlighted');
+            });
+            
+            // Show group info notification
+            showGroupInfo(groupName, groupId, scheduledCount);
         });
     }
     grid.querySelectorAll('.tt-trigger[draggable="true"]').forEach(initBadgeDrag);
@@ -709,6 +755,56 @@ function initTooltip(el) {
         el.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
         new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
     } catch(e) { }
+}
+
+function showGroupInfo(groupName, groupId, scheduledCount) {
+    // Get unscheduled count from unscheduled panel
+    const unscheduledItem = document.querySelector(`.unscheduled-item[data-group-id="${groupId}"]`);
+    let unscheduledCount = 0;
+    let studentCount = 0;
+    let roomNumbers = new Set();
+    let subjectName = '';
+    let teacherName = '';
+    
+    if (unscheduledItem) {
+        const remainingBadge = unscheduledItem.querySelector('.remaining-badge');
+        if (remainingBadge) {
+            unscheduledCount = parseInt(remainingBadge.textContent) || 0;
+        }
+    }
+    
+    // Get details from all badges with this group name and ID
+    document.querySelectorAll(`.tt-trigger[data-group-name="${groupName}"][data-group-id="${groupId}"]`).forEach(badge => {
+        const count = parseInt(badge.dataset.studentCount) || 0;
+        if (count > 0 && studentCount === 0) studentCount = count;
+        
+        const roomNum = badge.dataset.roomNumber;
+        if (roomNum) roomNumbers.add(roomNum);
+        
+        if (!subjectName && badge.dataset.subjectName) {
+            subjectName = badge.dataset.subjectName;
+        }
+        
+        if (!teacherName && badge.dataset.teacherName) {
+            teacherName = badge.dataset.teacherName;
+        }
+    });
+    
+    const totalLessons = scheduledCount + unscheduledCount;
+    const roomsDisplay = roomNumbers.size > 0 ? Array.from(roomNumbers).join(', ') : '—';
+    
+    // Update notification
+    document.getElementById('groupInfoName').textContent = groupName;
+    document.getElementById('groupInfoSubject').textContent = subjectName || '—';
+    document.getElementById('groupInfoTeacher').textContent = teacherName || '—';
+    document.getElementById('groupInfoRooms').textContent = roomsDisplay;
+    document.getElementById('groupInfoStudents').textContent = studentCount > 0 ? studentCount : '—';
+    document.getElementById('groupInfoScheduled').textContent = scheduledCount;
+    document.getElementById('groupInfoUnscheduled').textContent = unscheduledCount;
+    document.getElementById('groupInfoTotal').textContent = totalLessons;
+    
+    // Show notification
+    document.getElementById('groupInfoNotification').style.display = 'block';
 }
 
 function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeElement) {
@@ -1951,6 +2047,77 @@ if (window.bootstrap) {
     left: 0;
     z-index: 5;
     background: #fff;
+}
+
+/* Group highlighting styles */
+.tt-trigger.group-highlighted {
+    background-color: #0d6efd !important;
+    color: white !important;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.3);
+}
+
+.timetable-cell.group-cell-highlighted {
+    background-color: #cfe2ff;
+    outline: 2px dashed #0d6efd;
+    outline-offset: -1px;
+}
+
+/* Group info notification */
+.group-info-notification {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: white;
+    border: 2px solid #0d6efd;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    padding: 0;
+    min-width: 280px;
+    z-index: 1000;
+    font-size: 14px;
+}
+
+.group-info-close {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    cursor: pointer;
+    color: #6c757d;
+    font-size: 18px;
+    line-height: 1;
+    font-weight: bold;
+}
+
+.group-info-close:hover {
+    color: #212529;
+}
+
+.group-info-content {
+    padding: 12px 16px;
+}
+
+.group-info-content h6 {
+    margin: 0 0 12px 0;
+    color: #0d6efd;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.group-info-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    color: #495057;
+}
+
+.group-info-stat .label {
+    font-weight: 500;
+}
+
+.group-info-stat .value {
+    color: #212529;
+    font-weight: 600;
 }
 </style>
 @endpush
