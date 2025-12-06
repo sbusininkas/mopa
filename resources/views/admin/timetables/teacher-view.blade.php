@@ -107,7 +107,7 @@
                                                 data-student-count="{{ $cell['student_count'] ?? 0 }}"
                                                 data-room-number="{{ $cell['room_number'] ?? '' }}"
                                                 data-teacher-name="{{ $cell['teacher_name'] ?? '' }}"
-                                            >{{ $cell['group'] }}</span>
+                                            >{{ $cell['group'] }}{{ $roomNumber ? ' (' . $roomNumber . ')' : '' }}<br/><small>{{ $subject }}</small></span>
                                         @else
                                             <span class="text-muted">—</span>
                                         @endif
@@ -120,6 +120,93 @@
             </div>
         </div>
     </div>
+
+    <!-- Groups list section (like subject groups view) -->
+    @if(count($groups ?? []) > 0)
+        <div class="card mt-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-collection"></i> {{ $teacher->full_name }} — Visos grupės</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Grupė</th>
+                                <th class="text-center" style="width: 120px;">Dalykas</th>
+                                <th class="text-center" style="width: 100px;">Kabinetas</th>
+                                <th class="text-center" style="width: 80px;">Mokiniai</th>
+                                <th class="text-center" style="width: 100px;">Suplanuota</th>
+                                <th class="text-center" style="width: 100px;">Nesuplanuota</th>
+                                <th class="text-center" style="width: 60px;">Veiksmai</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($groups as $group)
+                                <tr>
+                                    <td>
+                                        <a href="{{ route('schools.timetables.groups.details', [$school, $timetable, $group['id']]) }}" class="text-decoration-none">
+                                            <strong>{{ $group['name'] }}</strong>
+                                        </a>
+                                    </td>
+                                    <td class="text-center">
+                                        @if($group['subject_id'] && $group['subject_name'])
+                                            <a href="{{ route('schools.timetables.subject-groups', [$school, $timetable, $group['subject_name']]) }}" 
+                                               class="text-decoration-none link-primary"
+                                               title="Atidaryti dalyko grupes">
+                                                <small>{{ $group['subject_name'] }}</small>
+                                            </a>
+                                        @else
+                                            <small>{{ $group['subject_name'] ?? '—' }}</small>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        @if($group['room_number'])
+                                            <span class="badge bg-dark">{{ $group['room_number'] }}
+                                                @if($group['room_name'])
+                                                    {{ $group['room_name'] }}
+                                                @endif
+                                            </span>
+                                        @else
+                                            <span class="text-muted">—</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info text-dark">{{ $group['students_count'] }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success">{{ $group['scheduled_count'] }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        @if($group['unscheduled_count'] > 0)
+                                            <span class="badge bg-warning text-dark">{{ $group['unscheduled_count'] }}</span>
+                                        @else
+                                            <span class="badge bg-secondary">0</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="{{ route('schools.timetables.groups.details', [$school, $timetable, $group['id']]) }}" 
+                                           class="btn btn-sm btn-outline-primary" 
+                                           title="Atidaryti grupę">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer bg-light">
+                <ul class="mb-0 small text-muted">
+                    <li><strong>Iš viso grupių:</strong> {{ count($groups) }}</li>
+                    <li><strong>Iš viso mokinių:</strong> {{ collect($groups)->sum('students_count') }}</li>
+                    <li><strong>Iš viso suplanuotų pamokų:</strong> {{ collect($groups)->sum('scheduled_count') }}</li>
+                    <li><strong>Iš viso nesuplanuotų pamokų:</strong> {{ collect($groups)->sum('unscheduled_count') }}</li>
+                </ul>
+            </div>
+        </div>
+    @endif
 </div>
 
 @endsection
@@ -156,6 +243,14 @@
         <div class="group-info-stat" style="border-top: 1px solid #dee2e6; padding-top: 8px; margin-top: 8px;">
             <span class="label">Iš viso:</span>
             <span id="groupInfoTotal" class="value" style="font-weight: bold; color: #0d6efd;">0</span>
+        </div>
+        <div class="d-flex gap-2 mt-2">
+            <a id="groupInfoViewLink" href="#" target="_blank" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-box-arrow-up-right"></i> Peržiūra
+            </a>
+            <a id="groupInfoEditLink" href="#" target="_blank" class="btn btn-sm btn-primary">
+                <i class="bi bi-pencil-square"></i> Redaguoti
+            </a>
         </div>
     </div>
 </div>
@@ -330,7 +425,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                         data-group-id=\"${swapData.swappedHtml.group_id ?? ''}\"
                                         data-teacher-id=\"${teacherId}\"
                                         data-group-name=\"${swapData.swappedHtml.group}\"
-                                        data-subject-name=\"${swapData.swappedHtml.subject ?? ''}\">${swapData.swappedHtml.group}</span>`;
+                                        data-subject-name=\"${swapData.swappedHtml.subject ?? ''}\">${swapData.swappedHtml.group}${swapData.swappedHtml.room_number ? ' (' + swapData.swappedHtml.room_number + ')' : ''}<br/><small>${swapData.swappedHtml.subject ?? '—'}</small></span>`;
                                 originalCell.innerHTML = swappedBadgeHtml;
                                 const badge = originalCell.querySelector('.tt-trigger');
                                 initBadgeDrag(badge);
@@ -355,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                 data-group-id=\"${groupId}\"
                                 data-teacher-id=\"${teacherId}\"
                                 data-group-name=\"${swapData.html.group}\"
-                                data-subject-name=\"${swapData.html.subject ?? ''}\">${swapData.html.group}</span>`;
+                                data-subject-name=\"${swapData.html.subject ?? ''}\">${swapData.html.group}${swapData.html.room_number ? ' (' + swapData.html.room_number + ')' : ''}<br/><small>${swapData.html.subject ?? '—'}</small></span>`;
                         cell.innerHTML = badgeHtml;
                         const targetBadge = cell.querySelector('.tt-trigger');
                         initBadgeDrag(targetBadge);
@@ -387,7 +482,7 @@ document.addEventListener('DOMContentLoaded', function(){
                             data-group-id=\"${groupId}\"
                             data-teacher-id=\"${teacherId}\"
                             data-group-name=\"${data.html.group}\"
-                            data-subject-name=\"${data.html.subject ?? ''}\">${data.html.group}</span>`;
+                            data-subject-name=\"${data.html.subject ?? ''}\">${data.html.group}${data.html.room_number ? ' (' + data.html.room_number + ')' : ''}<br/><small>${data.html.subject ?? '—'}</small></span>`;
                     cell.innerHTML = badgeHtml;
                     const badge = cell.querySelector('.tt-trigger');
                     initBadgeDrag(badge);
@@ -434,7 +529,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                             data-group-id=\"${groupId}\"
                                             data-teacher-id=\"${teacherId}\"
                                             data-group-name=\"${data.html.group}\"
-                                            data-subject-name=\"${data.html.subject ?? ''}\">${data.html.group}</span>`;
+                                            data-subject-name=\"${data.html.subject ?? ''}\">${data.html.group}${data.html.room_number ? ' (' + data.html.room_number + ')' : ''}<br/><small>${data.html.subject ?? '—'}</small></span>`;
                     cell.innerHTML = badgeHtml;
                     scheduled = true;
                     const badge = cell.querySelector('.tt-trigger');
@@ -802,6 +897,13 @@ function showGroupInfo(groupName, groupId, scheduledCount) {
     document.getElementById('groupInfoScheduled').textContent = scheduledCount;
     document.getElementById('groupInfoUnscheduled').textContent = unscheduledCount;
     document.getElementById('groupInfoTotal').textContent = totalLessons;
+
+    // Set action links
+    const basePath = `/admin/schools/{{ $school->id }}/timetables/{{ $timetable->id }}/groups/${groupId}`;
+    const viewLink = document.getElementById('groupInfoViewLink');
+    const editLink = document.getElementById('groupInfoEditLink');
+    if (viewLink) viewLink.href = basePath + '/details';
+    if (editLink) editLink.href = basePath + '/details#edit';
     
     // Show notification
     document.getElementById('groupInfoNotification').style.display = 'block';

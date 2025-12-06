@@ -121,6 +121,12 @@ Route::middleware(['auth', 'school.admin.or.supervisor'])->group(function () {
     Route::get('/admin/schools/{school}/timetables/{timetable}/teacher/{teacher}', [\App\Http\Controllers\TimetableController::class, 'teacherView'])
         ->whereNumber('teacher')
         ->name('schools.timetables.teacher');
+    Route::get('/admin/schools/{school}/timetables/{timetable}/student/{student}', [\App\Http\Controllers\TimetableController::class, 'studentView'])
+        ->whereNumber('student')
+        ->name('schools.timetables.student-view');
+    Route::get('/admin/schools/{school}/timetables/{timetable}/room/{room}', [\App\Http\Controllers\TimetableController::class, 'roomView'])
+        ->whereNumber('room')
+        ->name('schools.timetables.room-view');
     Route::get('/admin/schools/{school}/timetables/{timetable}/unscheduled', [\App\Http\Controllers\TimetableController::class, 'unscheduled'])->name('schools.timetables.unscheduled');
     Route::get('/admin/schools/{school}/timetables/{timetable}/unscheduled-html', [\App\Http\Controllers\TimetableController::class, 'unscheduledHtml'])->name('schools.timetables.unscheduled-html');
     Route::post('/admin/schools/{school}/timetables/{timetable}/check-conflict', [\App\Http\Controllers\TimetableController::class, 'checkConflict'])->name('schools.timetables.check-conflict');
@@ -143,11 +149,16 @@ Route::middleware(['auth', 'school.admin.or.supervisor'])->group(function () {
     Route::get('/admin/schools/{school}/timetables/{timetable}/groups-list', [\App\Http\Controllers\TimetableGroupController::class, 'list'])->name('schools.timetables.groups.list');
     Route::post('/admin/schools/{school}/timetables/{timetable}/groups', [\App\Http\Controllers\TimetableGroupController::class, 'store'])->name('schools.timetables.groups.store');
     Route::get('/admin/schools/{school}/timetables/{timetable}/groups/{group}', [\App\Http\Controllers\TimetableGroupController::class, 'show'])->name('schools.timetables.groups.show');
+    Route::get('/admin/schools/{school}/timetables/{timetable}/groups/{group}/details', [\App\Http\Controllers\TimetableGroupController::class, 'details'])->name('schools.timetables.groups.details');
     Route::get('/admin/schools/{school}/timetables/{timetable}/groups/{group}/edit-data', [\App\Http\Controllers\TimetableGroupController::class, 'editData'])->name('schools.timetables.groups.edit-data');
+    Route::get('/admin/schools/{school}/timetables/{timetable}/subject/{subject}', [\App\Http\Controllers\TimetableGroupController::class, 'subjectGroups'])->name('schools.timetables.subject-groups');
     Route::put('/admin/schools/{school}/timetables/{timetable}/groups/{group}/update', [\App\Http\Controllers\TimetableGroupController::class, 'update'])->name('schools.timetables.groups.update');
     Route::delete('/admin/schools/{school}/timetables/{timetable}/groups/{group}', [\App\Http\Controllers\TimetableGroupController::class, 'destroy'])->name('schools.timetables.groups.destroy');
     Route::post('/admin/schools/{school}/timetables/{timetable}/groups/{group}/assign-students', [\App\Http\Controllers\TimetableGroupController::class, 'assignStudents'])->name('schools.timetables.groups.assign-students');
     Route::get('/admin/schools/{school}/timetables/{timetable}/groups/{group}/students', [\App\Http\Controllers\TimetableGroupController::class, 'getStudents'])->name('schools.timetables.groups.students');
+    Route::get('/admin/schools/{school}/timetables/{timetable}/groups/{group}/schedule', [\App\Http\Controllers\TimetableGroupController::class, 'getGroupSchedule'])->name('schools.timetables.groups.schedule');
+    Route::get('/admin/schools/{school}/timetables/{timetable}/student-schedule', [\App\Http\Controllers\TimetableGroupController::class, 'getStudentSchedule'])->name('schools.timetables.student-schedule');
+    Route::get('/admin/schools/{school}/timetables/{timetable}/room-schedule', [\App\Http\Controllers\TimetableGroupController::class, 'getRoomSchedule'])->name('schools.timetables.room-schedule');
     Route::post('/admin/schools/{school}/timetables/{timetable}/groups/{group}/copy-unscheduled', [\App\Http\Controllers\TimetableGroupController::class, 'copyUnscheduled'])->name('schools.timetables.groups.copy-unscheduled');
 
     // Admin API: students by class (used in timetable UI)

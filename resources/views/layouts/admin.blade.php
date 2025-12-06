@@ -23,11 +23,12 @@
         .navbar-modern {
             background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-            padding: 0.75rem 0;
+            padding: 1rem 0;
             position: sticky;
             top: 0;
             z-index: 1030;
             backdrop-filter: blur(10px);
+            margin-bottom: 2rem;
         }
         
         .navbar-modern .navbar-brand {
@@ -95,6 +96,36 @@
             margin-right: 8px;
         }
         
+        /* Footer Styles */
+        .admin-footer {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: rgba(255, 255, 255, 0.95);
+            padding: 2rem 0;
+            margin-top: 4rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            font-size: 0.95rem;
+            box-shadow: 0 -4px 12px rgba(102, 126, 234, 0.15);
+        }
+        
+        .admin-footer p {
+            margin: 0;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+        
+        .admin-footer .footer-brand {
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .admin-footer .footer-copyright {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
         /* School Switch Dropdown - Modern hover effect */
         .school-switch-dropdown .dropdown-item {
             padding: 0.75rem 1.25rem;
@@ -137,6 +168,7 @@
             display: flex;
             gap: 1rem;
             margin-top: 1rem;
+            position: relative;
         }
         .admin-sidebar {
             width: 280px;
@@ -147,10 +179,13 @@
             height: fit-content;
             max-height: calc(100vh - 100px);
             overflow-y: auto;
+            overflow-x: visible;
             position: sticky;
             top: 20px;
             border: 1px solid rgba(102, 126, 234, 0.1);
             animation: slideInLeft 0.4s ease-out;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
         }
         /* Custom Scrollbar for Sidebar */
         .admin-sidebar::-webkit-scrollbar {
@@ -241,10 +276,32 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            position: relative;
+            transition: all 0.3s ease;
         }
         .sidebar-section-title i {
             font-size: 1rem;
             color: var(--primary-color);
+            flex-shrink: 0;
+        }
+        .sidebar-section-title span {
+            transition: opacity 0.3s ease;
+        }
+        .admin-sidebar.collapsed .sidebar-section-title {
+            justify-content: center;
+            padding: 1rem 0.5rem 0.75rem;
+            margin: 0;
+        }
+        .admin-sidebar.collapsed .sidebar-section-title span {
+            display: none;
+        }
+        .admin-sidebar.collapsed .sidebar-section-title:hover {
+            position: relative;
+        }
+        /* Tooltip styling for collapsed state */
+        .nav-link[title],
+        .sidebar-section-title[title] {
+            position: relative;
         }
         .sidebar-divider {
             border: 0;
@@ -258,6 +315,57 @@
         }
         .admin-sidebar .alert {
             font-size: 0.85rem;
+        }
+
+        /* Sidebar Collapse/Expand Styles */
+        .admin-sidebar.collapsed {
+            width: 80px;
+            padding: 1.5rem 0.5rem;
+        }
+        .admin-sidebar.collapsed .nav-link span,
+        .admin-sidebar.collapsed .sidebar-section-title span {
+            display: none;
+        }
+        .admin-sidebar.collapsed .sidebar-section-title {
+            justify-content: center;
+            margin: 1rem 0;
+        }
+        .admin-sidebar.collapsed .nav-link {
+            justify-content: center;
+            padding: 0.75rem 0;
+        }
+        .admin-content {
+            flex: 1;
+            transition: all 0.3s ease;
+        }
+        .sidebar-toggle-btn {
+            position: absolute;
+            right: -16px;
+            top: 20px;
+            width: 32px;
+            height: 32px;
+            background: var(--primary-color);
+            border: 3px solid white;
+            border-radius: 50%;
+            color: white;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1001;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            padding: 0;
+        }
+        .sidebar-toggle-btn:hover {
+            transform: scale(1.15) rotate(180deg);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+            background: var(--secondary-color);
+        }
+        .admin-sidebar.collapsed ~ .sidebar-toggle-btn {
+            right: -16px;
+        }
             margin: 0 1rem;
             border-radius: 12px;
         }
@@ -452,9 +560,14 @@
             @endphp
             @if($currentSchool)
             <div class="admin-container">
-                <!-- Sidebar -->
-                <div class="admin-sidebar">
-                    @include('partials.sidebar')
+                <!-- Sidebar with Toggle Button -->
+                <div style="position: relative; display: inline-block;">
+                    <div class="admin-sidebar" id="adminSidebar">
+                        @include('partials.sidebar')
+                    </div>
+                    <button class="sidebar-toggle-btn" id="sidebarToggle" title="Sutraukti/Išskleisti meniu">
+                        <i class="bi bi-chevron-left" id="toggleIcon"></i>
+                    </button>
                 </div>
 
                 <!-- Content -->
@@ -485,6 +598,140 @@
             document.body.classList.remove('modal-open');
             document.body.style.removeProperty('overflow');
             document.body.style.removeProperty('padding-right');
+            
+            // Initialize sidebar toggle
+            const sidebarToggle = document.getElementById('sidebarToggle');
+            const adminSidebar = document.getElementById('adminSidebar');
+            const toggleIcon = document.getElementById('toggleIcon');
+            
+            // Load sidebar state from localStorage
+            const sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+            if (sidebarCollapsed) {
+                adminSidebar.classList.add('collapsed');
+                toggleIcon.classList.remove('bi-chevron-left');
+                toggleIcon.classList.add('bi-chevron-right');
+            }
+            
+            // Toggle sidebar on button click
+            sidebarToggle.addEventListener('click', function() {
+                adminSidebar.classList.toggle('collapsed');
+                toggleIcon.classList.toggle('bi-chevron-left');
+                toggleIcon.classList.toggle('bi-chevron-right');
+                
+                // Save state to localStorage
+                const isCollapsed = adminSidebar.classList.contains('collapsed');
+                localStorage.setItem('sidebarCollapsed', isCollapsed);
+            });
+            
+            // Tooltip system for collapsed sidebar
+            let tooltipElement = null;
+            let arrowElement = null;
+            
+            function createTooltip() {
+                if (!tooltipElement) {
+                    tooltipElement = document.createElement('div');
+                    tooltipElement.className = 'sidebar-tooltip';
+                    tooltipElement.style.cssText = `
+                        position: fixed;
+                        background: var(--primary-color);
+                        color: white;
+                        padding: 0.5rem 0.75rem;
+                        border-radius: 6px;
+                        font-size: 0.75rem;
+                        white-space: nowrap;
+                        z-index: 9999;
+                        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+                        font-weight: 500;
+                        pointer-events: none;
+                        display: none;
+                    `;
+                    document.body.appendChild(tooltipElement);
+                }
+                return tooltipElement;
+            }
+            
+            function createArrow() {
+                if (!arrowElement) {
+                    arrowElement = document.createElement('div');
+                    arrowElement.className = 'sidebar-tooltip-arrow';
+                    arrowElement.style.cssText = `
+                        position: fixed;
+                        width: 0;
+                        height: 0;
+                        border-top: 4px solid transparent;
+                        border-bottom: 4px solid transparent;
+                        border-right: 4px solid var(--primary-color);
+                        z-index: 9999;
+                        pointer-events: none;
+                        display: none;
+                    `;
+                    document.body.appendChild(arrowElement);
+                }
+                return arrowElement;
+            }
+            
+            function showTooltip(element, event) {
+                if (!adminSidebar.classList.contains('collapsed')) return;
+                
+                const tooltip = createTooltip();
+                const arrow = createArrow();
+                const text = element.getAttribute('title');
+                
+                if (!text) return;
+                
+                tooltip.textContent = text;
+                
+                const rect = element.getBoundingClientRect();
+                const tooltipWidth = 150; // approximate width
+                const offset = 12;
+                
+                tooltip.style.display = 'block';
+                arrow.style.display = 'block';
+                
+                // Position tooltip to the right of sidebar
+                const tooltipLeft = rect.right + offset;
+                const tooltipTop = rect.top + rect.height / 2 - 12; // Center vertically
+                
+                tooltip.style.left = tooltipLeft + 'px';
+                tooltip.style.top = tooltipTop + 'px';
+                
+                // Position arrow
+                arrow.style.left = (rect.right + 4) + 'px';
+                arrow.style.top = (rect.top + rect.height / 2) + 'px';
+            }
+            
+            function hideTooltip() {
+                if (tooltipElement) {
+                    tooltipElement.style.display = 'none';
+                }
+                if (arrowElement) {
+                    arrowElement.style.display = 'none';
+                }
+            }
+            
+            // Add tooltip listeners to nav links and section titles
+            const tooltipElements = adminSidebar.querySelectorAll('[title]');
+            tooltipElements.forEach(el => {
+                let hideTimeout;
+                
+                el.addEventListener('mouseover', function(e) {
+                    clearTimeout(hideTimeout);
+                    showTooltip(this, e);
+                });
+                
+                el.addEventListener('mousemove', function(e) {
+                    if (adminSidebar.classList.contains('collapsed')) {
+                        clearTimeout(hideTimeout);
+                        showTooltip(this, e);
+                    }
+                });
+                
+                el.addEventListener('mouseout', function() {
+                    hideTimeout = setTimeout(() => {
+                        hideTooltip();
+                    }, 100);
+                });
+            });
         });
         
         // Fetch unread notifications
@@ -540,5 +787,13 @@
     @endauth
     
     @stack('scripts')
+    
+    <!-- Footer -->
+    <footer class="admin-footer">
+        <div class="container">
+            <div class="footer-brand">MOPA</div>
+            <p class="footer-copyright">© 2026 MOPA. Visos teisės saugomos.</p>
+        </div>
+    </footer>
 </body>
 </html>

@@ -7,6 +7,7 @@ use App\Models\School;
 use App\Models\Subject;
 use App\Models\Timetable;
 use App\Models\TimetableGroup;
+use App\Models\TimetableSlot;
 use Illuminate\Http\Request;
 
 class TimetableGroupController extends Controller
@@ -183,18 +184,131 @@ class TimetableGroupController extends Controller
         ]);
     }
 
+    public function details(School $school, Timetable $timetable, TimetableGroup $group)
+    {
+        abort_unless($timetable->school_id === $school->id && $group->timetable_id === $timetable->id, 404);
+
+        $group->load(['students', 'subject', 'teacherLoginKey', 'room']);
+        $subjects = $school->subjects()->orderBy('name')->get();
+        $teachers = $school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->orderBy('first_name')->get();
+        $rooms = $school->rooms()->orderBy('number')->get();
+        $allStudents = $school->loginKeys()
+            ->where('type', 'student')
+            ->leftJoin('classes', 'login_keys.class_id', '=', 'classes.id')
+            ->select('login_keys.*')
+            ->orderBy('classes.name')
+            ->orderBy('login_keys.last_name')
+            ->orderBy('login_keys.first_name')
+            ->get();
+
+        return view('admin.timetables.group-show', [
+            'school' => $school,
+            'timetable' => $timetable,
+            'group' => $group,
+            'subjects' => $subjects,
+            'teachers' => $teachers,
+            'rooms' => $rooms,
+            'allStudents' => $allStudents,
+        ]);
+    }
+
     public function assignStudents(Request $request, School $school, Timetable $timetable, TimetableGroup $group)
     {
         abort_unless($timetable->school_id === $school->id && $group->timetable_id === $timetable->id, 404);
+        
+        // Support both student_ids and login_key_ids for backwards compatibility
+        // Note: student_ids are actually login_key IDs (student user IDs)
         $validated = $request->validate([
+            'student_ids' => 'nullable|array',
+            'student_ids.*' => 'integer',
             'login_key_ids' => 'nullable|array',
             'login_key_ids.*' => 'exists:login_keys,id',
+            'action' => 'nullable|in:add,remove',
+            'ignore_conflict' => 'nullable|boolean'
         ]);
 
-        $ids = $validated['login_key_ids'] ?? [];
-        // sync to fully reflect selection, allowing removal when empty
-        $group->students()->sync($ids);
+        $ids = $validated['student_ids'] ?? $validated['login_key_ids'] ?? [];
+        $action = $validated['action'] ?? 'add';
+        $ignoreConflict = $validated['ignore_conflict'] ?? false;
+        
+        // Check for conflicts if not ignoring them and only when adding
+        $conflicts = [];
+        if (!$ignoreConflict && !empty($ids) && $action !== 'remove') {
+            $conflicts = $this->checkScheduleConflicts($timetable, $group, $ids);
+        }
+        
+        // If there are conflicts and we're not ignoring them, return conflict info
+        if (!empty($conflicts) && !$ignoreConflict) {
+            if ($request->expectsJson() || $request->isJson()) {
+                return response()->json([
+                    'success' => false,
+                    'hasConflict' => true,
+                    'conflicts' => $conflicts,
+                    'message' => 'Yra tvarkaraščio konfliktai'
+                ], 200);
+            }
+        }
+        
+        if ($action === 'remove') {
+            // Remove specific students
+            $group->students()->detach($ids);
+        } else {
+            // Add or sync students
+            $group->students()->syncWithoutDetaching($ids);
+        }
+        
+        // If request is AJAX, return JSON
+        if ($request->expectsJson() || $request->isJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Priskyrimai atnaujinti'
+            ]);
+        }
+        
+
         return redirect()->back()->with('success', 'Priskyrimai atnaujinti');
+    }
+
+    private function checkScheduleConflicts(Timetable $timetable, TimetableGroup $group, $studentIds)
+    {
+        $conflicts = [];
+        
+        // Get all slots for this group
+        $groupSlots = TimetableSlot::where('timetable_id', $timetable->id)
+            ->where('timetable_group_id', $group->id)
+            ->get();
+        
+        foreach ($studentIds as $studentId) {
+            // Get all other slots for this student
+            $studentSlots = TimetableSlot::where('timetable_id', $timetable->id)
+                ->whereHas('group', function ($q) {
+                    $q->whereHas('students');
+                })
+                ->get()
+                ->filter(function ($slot) use ($studentId) {
+                    return $slot->group->students()->where('login_key_id', $studentId)->exists();
+                });
+            
+            // Check for overlapping slots
+            foreach ($groupSlots as $groupSlot) {
+                foreach ($studentSlots as $studentSlot) {
+                    if ($groupSlot->day === $studentSlot->day && 
+                        $groupSlot->hour === $studentSlot->hour &&
+                        $groupSlot->id !== $studentSlot->id) {
+                        $conflicts[] = [
+                            'student_id' => $studentId,
+                            'conflict_slot' => [
+                                'day' => $studentSlot->day,
+                                'hour' => $studentSlot->hour,
+                                'group' => $studentSlot->group->name
+                            ]
+                        ];
+                    }
+                }
+            }
+        }
+        
+        return $conflicts;
     }
 
     public function getStudents(School $school, Timetable $timetable, TimetableGroup $group)
@@ -246,6 +360,151 @@ class TimetableGroupController extends Controller
             'success' => true, 
             'message' => 'Grupės kopija sukurta su ' . $validated['unscheduled_count'] . ' pamokomis.',
             'group_id' => $newGroup->id
+        ]);
+    }
+
+    public function subjectGroups(School $school, Timetable $timetable, string $subject)
+    {
+        $user = auth()->user();
+        if (!$user->isSupervisor() && !$user->isSchoolAdmin($school->id)) {
+            abort(403, 'Jūs neturite prieigos prie šios mokyklos.');
+        }
+        if (!$user->isSupervisor()) {
+            $activeSchoolId = session('active_school_id');
+            if ($activeSchoolId && $activeSchoolId !== $school->id) {
+                abort(403, 'Galite redaguoti tik aktyvią mokyklą. Pirmiausia pasirinkite ją iš meniu.');
+            }
+            if (!$activeSchoolId) {
+                session(['active_school_id' => $school->id]);
+            }
+        }
+        abort_unless($timetable->school_id === $school->id, 404);
+
+        // Find subject by name
+        $subjectModel = $school->subjects()->where('name', $subject)->first();
+        
+        // Get all groups for this subject in this timetable
+        $groups = $timetable->groups()
+            ->where('subject_id', $subjectModel?->id)
+            ->with(['subject', 'teacherLoginKey', 'room', 'students'])
+            ->get();
+
+        // Prepare group data with scheduled/unscheduled counts
+        $groupsData = $groups->map(function($group) use ($timetable) {
+            $scheduled = $timetable->slots()
+                ->where('timetable_group_id', $group->id)
+                ->count();
+            $unscheduled = max(0, ($group->lessons_per_week ?? 0) - $scheduled);
+            
+            // Get unique students for this group
+            $uniqueStudents = $group->students()->distinct()->count();
+            
+            return [
+                'id' => $group->id,
+                'name' => $group->name,
+                'subject_name' => $group->subject?->name,
+                'teacher_name' => $group->teacherLoginKey?->full_name,
+                'teacher_id' => $group->teacherLoginKey?->id,
+                'room_number' => $group->room?->number,
+                'room_name' => $group->room?->name,
+                'week_type' => $group->week_type,
+                'lessons_per_week' => $group->lessons_per_week ?? 0,
+                'is_priority' => $group->is_priority ? true : false,
+                'scheduled_count' => $scheduled,
+                'unscheduled_count' => $unscheduled,
+                'students_count' => $uniqueStudents,
+            ];
+        })->sortBy('name')->values();
+
+        return view('admin.timetables.subject-groups', [
+            'school' => $school,
+            'timetable' => $timetable,
+            'subject' => $subject,
+            'groups' => $groupsData,
+        ]);
+    }
+
+    public function getStudentSchedule(Request $request, School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $studentId = $request->query('student_id');
+        if (!$studentId) {
+            return response()->json(['success' => false, 'message' => 'Missing student_id'], 400);
+        }
+
+        // Get all slots for this student in this timetable
+        // Join through timetable_group_student pivot table to find groups this student is in
+        $slots = TimetableSlot::where('timetable_id', $timetable->id)
+            ->whereHas('group.students', function ($q) use ($studentId) {
+                $q->where('login_key_id', $studentId);
+            })
+            ->get()
+            ->map(function ($slot) {
+                return [
+                    'day' => $slot->day,
+                    'hour' => (int)$slot->slot, // Use 'slot' column as hour, cast to int
+                    'group_name' => $slot->group->name ?? '',
+                    // Ensure we return the correct subject name attribute
+                    'subject_name' => optional($slot->group->subject)->name ?? optional($slot->group->subject)->pavadinimas ?? '',
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'schedule' => $slots
+        ]);
+    }
+
+    public function getGroupSchedule(Request $request, School $school, Timetable $timetable, TimetableGroup $group)
+    {
+        abort_unless($timetable->school_id === $school->id && $group->timetable_id === $timetable->id, 404);
+        
+        // Get all slots for this group in this timetable
+        $slots = TimetableSlot::where('timetable_id', $timetable->id)
+            ->where('timetable_group_id', $group->id)
+            ->get()
+            ->map(function ($slot) {
+                return [
+                    'day' => $slot->day,
+                    'hour' => (int)$slot->slot,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'schedule' => $slots
+        ]);
+    }
+
+    public function getRoomSchedule(Request $request, School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $roomId = $request->query('room_id');
+        if (!$roomId) {
+            return response()->json(['success' => false, 'message' => 'Missing room_id'], 400);
+        }
+
+        // Get all slots for this room in this timetable
+        $slots = TimetableSlot::where('timetable_id', $timetable->id)
+            ->whereHas('group', function ($q) use ($roomId) {
+                $q->where('room_id', $roomId);
+            })
+            ->get()
+            ->map(function ($slot) {
+                return [
+                    'day' => $slot->day,
+                    'hour' => $slot->hour,
+                    'group_name' => $slot->group->name ?? '',
+                    'subject_name' => $slot->group->subject->pavadinimas ?? '',
+                    'teacher_name' => $slot->group->teacher->full_name ?? '',
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'schedule' => $slots
         ]);
     }
 }

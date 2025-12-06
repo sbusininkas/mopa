@@ -1,19 +1,20 @@
 {{-- Student Sidebar --}}
 {{-- Mokinio navigacija - bus kuriama vėliau --}}
-<div class="sidebar-section-title">
-    <i class="bi bi-mortarboard-fill"></i> Mokinys
+<div class="sidebar-section-title" title="Mokinys">
+    <i class="bi bi-mortarboard-fill"></i>
+    <span>Mokinys</span>
 </div>
 <nav class="nav flex-column">
     {{-- Šie meniu punktai bus pridėti vėliau --}}
-    <a href="#" class="nav-link disabled text-muted">
+    <a href="#" class="nav-link disabled text-muted" title="Mano tvarkaraštis">
         <i class="bi bi-calendar-check-fill"></i>
         <span>Mano tvarkaraštis</span>
     </a>
-    <a href="#" class="nav-link disabled text-muted">
+    <a href="#" class="nav-link disabled text-muted" title="Mano pamokos">
         <i class="bi bi-journal-text"></i>
         <span>Mano pamokos</span>
     </a>
-    <a href="#" class="nav-link disabled text-muted">
+    <a href="#" class="nav-link disabled text-muted" title="Pažymiai">
         <i class="bi bi-award-fill"></i>
         <span>Pažymiai</span>
     </a>

@@ -2,8 +2,6 @@
 
 @section('content')
 <div style="width: 100%;">
-    <div class="row mb-3">
-        <div class="col-md-9">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2><i class="bi bi-calendar3"></i> {{ $timetable->name }} — Mokytojų tvarkaraštis</h2>
         <div class="btn-group">
@@ -15,50 +13,48 @@
             </button>
         </div>
     </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card h-100" id="unscheduledPanel">
-                <div class="card-header p-2"><strong>Nesuplanuotos grupės</strong></div>
-                <div class="card-body p-2" style="max-height:220px; overflow:auto;">
-                    @forelse($unscheduled as $u)
-                        <div class="unscheduled-item mb-1 d-flex align-items-center" draggable="true"
-                             data-kind="unscheduled"
-                             data-group-id="{{ $u['group_id'] }}"
-                             data-group-name="{{ $u['group_name'] ?? $u['group'] ?? '' }}"
-                             data-subject-name="{{ $u['subject_name'] ?? $u['subject'] ?? '' }}"
-                             data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
-                             data-remaining="{{ $u['remaining_lessons'] }}">
-                            <div class="flex-grow-1">
-                                <div class="unscheduled-title">
-                                    {{ $u['group_name'] ?? $u['group'] ?? 'Grupė' }}
-                                    <span class="badge bg-primary ms-2 remaining-badge">{{ $u['remaining_lessons'] }}</span>
-                                </div>
-                                <div class="unscheduled-meta">
-                                    <span class="unscheduled-subject">{{ $u['subject_name'] ?? $u['subject'] ?? '' }}</span>
-                                    @if(!empty($u['teacher_name'] ?? $u['teacher'] ?? ''))
-                                        <span class="unscheduled-teacher">{{ $u['teacher_name'] ?? $u['teacher'] }}</span>
-                                    @endif
-                                </div>
-                            </div>
-                            @if(!empty($u['teacher_login_key_id']))
-                            <div class="ms-2">
-                                <button type="button" class="btn btn-outline-info btn-sm" 
-                                        onclick="findAvailableSlots({{ $u['group_id'] }}, '{{ addslashes($u['group_name'] ?? $u['group'] ?? '') }}', '{{ addslashes($u['subject_name'] ?? $u['subject'] ?? '') }}', {{ $u['teacher_login_key_id'] }})"
-                                        title="Rasti laisvus langelius">
-                                    <i class="bi bi-search"></i>
-                                </button>
-                            </div>
+
+    <!-- Nesuplanuotos grupės panel - PILNA PLOTIS -->
+    <div class="card mb-3" id="unscheduledPanel">
+        <div class="card-header p-2"><strong>Nesuplanuotos grupės</strong></div>
+        <div class="card-body p-2" style="max-height:150px; overflow:auto;">
+            @forelse($unscheduled as $u)
+                <div class="unscheduled-item mb-1 d-flex align-items-center" draggable="true"
+                     data-kind="unscheduled"
+                     data-group-id="{{ $u['group_id'] }}"
+                     data-group-name="{{ $u['group_name'] ?? $u['group'] ?? '' }}"
+                     data-subject-name="{{ $u['subject_name'] ?? $u['subject'] ?? '' }}"
+                     data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
+                     data-remaining="{{ $u['remaining_lessons'] }}">
+                    <div class="flex-grow-1">
+                        <div class="unscheduled-title">
+                            {{ $u['group_name'] ?? $u['group'] ?? 'Grupė' }}
+                            <span class="badge bg-primary ms-2 remaining-badge">{{ $u['remaining_lessons'] }}</span>
+                        </div>
+                        <div class="unscheduled-meta">
+                            <span class="unscheduled-subject">{{ $u['subject_name'] ?? $u['subject'] ?? '' }}</span>
+                            @if(!empty($u['teacher_name'] ?? $u['teacher'] ?? ''))
+                                <span class="unscheduled-teacher">{{ $u['teacher_name'] ?? $u['teacher'] }}</span>
                             @endif
                         </div>
-                    @empty
-                        <span class="text-muted small">Visos grupės suplanuotos</span>
-                    @endforelse
+                    </div>
+                    @if(!empty($u['teacher_login_key_id']))
+                    <div class="ms-2">
+                        <button type="button" class="btn btn-outline-info btn-sm" 
+                                onclick="findAvailableSlots({{ $u['group_id'] }}, '{{ addslashes($u['group_name'] ?? $u['group'] ?? '') }}', '{{ addslashes($u['subject_name'] ?? $u['subject'] ?? '') }}', {{ $u['teacher_login_key_id'] }})"
+                                title="Rasti laisvus langelius">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                    @endif
                 </div>
-                <div class="card-footer p-1 small d-flex justify-content-between align-items-center text-muted">
-                    <span>Tempkite ant mokytojo pamokos langelio</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAvailabilityMarks()" title="Išvalyti žymėjimus">Išvalyti</button>
-                </div>
-            </div>
+            @empty
+                <span class="text-muted small">Visos grupės suplanuotos</span>
+            @endforelse
+        </div>
+        <div class="card-footer p-1 small d-flex justify-content-between align-items-center text-muted">
+            <span>Tempkite ant mokytojo pamokos langelio</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAvailabilityMarks()" title="Išvalyti žymėjimus">Išvalyti</button>
         </div>
     </div>
 
@@ -66,8 +62,6 @@
         <i class="bi bi-info-circle me-1 align-middle fs-16"></i>
         Čia galite peržiūrėti mokytojų tvarkaraštį pagal dienas ir pamokas. Slankiokite lentelę horizontaliai ir vertikaliai.
     </div>
-
-    
 
     <div class="card" id="timetableCard">
         <div class="card-body p-0">
@@ -135,7 +129,7 @@
                                                       data-student-count="{{ $cell['student_count'] ?? 0 }}"
                                                       data-room-number="{{ $cell['room_number'] ?? '' }}"
                                                       data-teacher-name="{{ $cell['teacher_name'] ?? '' }}"
-                                                >{{ $cell['group'] }}</span>
+                                                >{{ $cell['group'] }}{{ $roomNumber ? ' (' . $roomNumber . ')' : '' }}<br/><small>{{ $subject }}</small></span>
                                             @else
                                                 <span class="text-muted">—</span>
                                             @endif
@@ -361,7 +355,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                                 data-teacher-id=\"${data.html.teacher_id}\"
                                                 data-group-name=\"${data.html.group}\"
                                                 data-subject-name=\"${data.html.subject ?? ''}\"
-                                        >${data.html.group}</span>`;
+                                        >${data.html.group}${data.html.room_number ? ' (' + data.html.room_number + ')' : ''}<br/><small>${data.html.subject ?? '—'}</small></span>`;
                     // re-init tooltip
                     if (window.bootstrap) {
                       const decoded = tooltipHtml;
@@ -440,7 +434,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                         data-teacher-id=\"${teacherId}\"
                                         data-group-name=\"${swapData.swappedHtml.group}\"
                                         data-subject-name=\"${swapData.swappedHtml.subject ?? ''}\"
-                                >${swapData.swappedHtml.group}</span>`;
+                                >${swapData.swappedHtml.group}${swapData.swappedHtml.room_number ? ' (' + swapData.swappedHtml.room_number + ')' : ''}<br/><small>${swapData.swappedHtml.subject ?? '—'}</small></span>`;
                                 if (window.bootstrap) {
                                     const swappedBadge = originalCell.querySelector('.tt-trigger');
                                     new bootstrap.Tooltip(swappedBadge, { title: swappedTooltip, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
@@ -466,7 +460,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                 data-teacher-id=\"${teacherId}\"
                                 data-group-name=\"${swapData.html.group}\"
                                 data-subject-name=\"${swapData.html.subject ?? ''}\"
-                        >${swapData.html.group}</span>`;
+                        >${swapData.html.group}${swapData.html.room_number ? ' (' + swapData.html.room_number + ')' : ''}<br/><small>${swapData.html.subject ?? '—'}</small></span>`;
                         if (window.bootstrap) {
                             const badge = cell.querySelector('.tt-trigger');
                             new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
@@ -499,7 +493,7 @@ document.addEventListener('DOMContentLoaded', function(){
                             data-teacher-id=\"${teacherId}\"
                             data-group-name=\"${data.html.group}\"
                             data-subject-name=\"${data.html.subject ?? ''}\"
-                    >${data.html.group}</span>`;
+                    >${data.html.group}${data.html.room_number ? ' (' + data.html.room_number + ')' : ''}<br/><small>${data.html.subject ?? '—'}</small></span>`;
                     if (window.bootstrap) {
                         const badge = cell.querySelector('.tt-trigger');
                         new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
@@ -562,6 +556,13 @@ function showGroupInfo(groupName, groupId, scheduledCount) {
     document.getElementById('groupInfoScheduled').textContent = scheduledCount;
     document.getElementById('groupInfoUnscheduled').textContent = unscheduledCount;
     document.getElementById('groupInfoTotal').textContent = totalLessons;
+
+    // Set action links
+    const basePath = `/admin/schools/{{ $school->id }}/timetables/{{ $timetable->id }}/groups/${groupId}`;
+    const viewLink = document.getElementById('groupInfoViewLink');
+    const editLink = document.getElementById('groupInfoEditLink');
+    if (viewLink) viewLink.href = basePath + '/details';
+    if (editLink) editLink.href = basePath + '/details#edit';
     
     // Show notification
     document.getElementById('groupInfoNotification').style.display = 'block';
@@ -1092,6 +1093,11 @@ async function showRoomConflictModal(conflictData, cell, groupId, teacherId, day
         console.log('Sending request to check room:', roomId);
         
         try {
+            // First, fetch room schedule
+            const scheduleResp = await fetch(`/admin/schools/{{ $school->id }}/timetables/{{ $timetable->id }}/room-schedule?room_id=${roomId}`);
+            const scheduleData = await scheduleResp.json();
+            
+            // Then check conflict
             const resp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
                 method: 'POST',
                 headers: {
@@ -1128,6 +1134,7 @@ async function showRoomConflictModal(conflictData, cell, groupId, teacherId, day
             const isAvailable = !hasRoomConflict;
             roomAvailability[roomId] = isAvailable;
             
+            // Update badge
             if (isAvailable) {
                 badge.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Laisvas</span>';
             } else {
@@ -1148,10 +1155,78 @@ async function showRoomConflictModal(conflictData, cell, groupId, teacherId, day
                     hint.innerHTML = '<i class="bi bi-x-circle"></i> Pasirinktas kabinetas užimtas. Pasirinkite kitą.';
                 }
             }
+            
+            // Show room schedule if data available
+            if (scheduleData.success && scheduleData.schedule) {
+                showRoomScheduleInModal(roomId, scheduleData.schedule, day, slot);
+            }
         } catch (err) {
             badge.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-question-circle"></i> Klaida</span>';
             roomAvailability[roomId] = false;
         }
+    }
+    
+    // Helper function to show room schedule
+    function showRoomScheduleInModal(roomId, schedule, targetDay, targetSlot) {
+        // Find or create schedule display
+        let scheduleDisplay = modal.querySelector(`#roomSchedule_${roomId}`);
+        if (!scheduleDisplay) {
+            const optionsDiv = modal.querySelector('#roomOptionsList');
+            scheduleDisplay = document.createElement('div');
+            scheduleDisplay.id = `roomSchedule_${roomId}`;
+            scheduleDisplay.className = 'mt-3 p-2 border rounded bg-light';
+            optionsDiv.parentNode.insertBefore(scheduleDisplay, optionsDiv.nextSibling);
+        }
+        
+        // Get max hour from schedule
+        let maxHour = 0;
+        schedule.forEach(slot => {
+            const hour = parseInt(slot.hour);
+            if (hour > maxHour) maxHour = hour;
+        });
+        if (maxHour === 0) maxHour = 6;
+        
+        const days = {
+            'Monday': 'Pirmadienis',
+            'Tuesday': 'Antradienis',
+            'Wednesday': 'Trečiadienis',
+            'Thursday': 'Ketvirtadienis',
+            'Friday': 'Penktadienis'
+        };
+        
+        let tableHtml = '<small><strong>Kabineto tvarkaraštis:</strong></small><div class="table-responsive" style="max-height: 250px; overflow-y: auto;"><table class="table table-sm table-bordered mb-0">';
+        
+        // Header
+        tableHtml += '<thead><tr><th style="width: 50px; text-align: center;">Val.</th>';
+        for (let day in days) {
+            tableHtml += `<th style="text-align: center; font-size: 0.8rem;">${days[day]}</th>`;
+        }
+        tableHtml += '</tr></thead><tbody>';
+        
+        // Body
+        for (let hour = 1; hour <= maxHour; hour++) {
+            const isTargetSlot = (hour == targetSlot);
+            tableHtml += `<tr ${isTargetSlot ? 'style="background-color: #fff3cd;"' : ''}>`;
+            tableHtml += `<td style="text-align: center; font-weight: bold; font-size: 0.8rem;">${hour}</td>`;
+            
+            for (let dayKey in days) {
+                const slot = schedule.find(s => s.day === dayKey && parseInt(s.hour) === hour);
+                const cellColor = (isTargetSlot && dayKey === targetDay) ? '#ffcccc' : (slot ? '#e8f4f8' : '#f9f9f9');
+                
+                if (slot) {
+                    tableHtml += `<td style="background-color: ${cellColor}; text-align: center; font-size: 0.7rem; padding: 2px;">
+                        <div><strong>${slot.group_name}</strong></div>
+                        <div><small>${slot.subject_name}</small></div>
+                    </td>`;
+                } else {
+                    tableHtml += `<td style="background-color: ${cellColor}; text-align: center; font-size: 0.7rem;">—</td>`;
+                }
+            }
+            tableHtml += '</tr>';
+        }
+        
+        tableHtml += '</tbody></table></div>';
+        scheduleDisplay.innerHTML = tableHtml;
     }
     
     // Handle room selection - check availability when selected
@@ -1234,7 +1309,7 @@ async function showRoomConflictModal(conflictData, cell, groupId, teacherId, day
                     data-teacher-id=\"${data.html.teacher_id}\"
                     data-group-name=\"${data.html.group}\"
                     data-subject-name=\"${data.html.subject ?? ''}\"
-            >${data.html.group}</span>`;
+            >${data.html.group}${data.html.room_number ? ' (' + data.html.room_number + ')' : ''}<br/><small>${data.html.subject ?? '—'}</small></span>`;
             
             // re-init tooltip
             if (window.bootstrap) {
@@ -1735,8 +1810,7 @@ async function addLessonToSlot(groupId, teacherId, day, slot, tempRoomId) {
                     data-teacher-id=\"${data.html.teacher_id}\"
                     data-group-name=\"${data.html.group}\"
                     data-subject-name=\"${data.html.subject ?? ''}\"
-            >${data.html.group}</span>`;
-            // re-init tooltip and drag
+            >${data.html.group}${data.html.room_number ? ' (' + data.html.room_number + ')' : ''}<br/><small>${data.html.subject ?? '—'}</small></span>`;
             if (window.bootstrap) {
                 const badge = cell.querySelector('.tt-trigger');
                 new bootstrap.Tooltip(badge, { title: tooltipHtml, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
@@ -2162,6 +2236,14 @@ tbody .sticky-col-name {
         <div class="group-info-stat" style="border-top: 1px solid #dee2e6; padding-top: 8px; margin-top: 8px;">
             <span class="label">Iš viso:</span>
             <span id="groupInfoTotal" class="value" style="font-weight: bold; color: #0d6efd;">0</span>
+        </div>
+        <div class="d-flex gap-2 mt-2">
+            <a id="groupInfoViewLink" href="#" target="_blank" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-box-arrow-up-right"></i> Peržiūra
+            </a>
+            <a id="groupInfoEditLink" href="#" target="_blank" class="btn btn-sm btn-primary">
+                <i class="bi bi-pencil-square"></i> Redaguoti
+            </a>
         </div>
     </div>
 </div>

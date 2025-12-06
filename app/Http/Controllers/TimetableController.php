@@ -240,6 +240,37 @@ class TimetableController extends Controller
             }
         }
 
+        // Get all groups for this teacher with stats
+        $groups = $timetable->groups()
+            ->where('teacher_login_key_id', $teacher)
+            ->with('subject', 'room', 'students')
+            ->get()
+            ->map(function($group) use ($timetable) {
+                $scheduledCount = $timetable->slots()
+                    ->where('timetable_group_id', $group->id)
+                    ->count();
+                
+                $studentsCount = $group->students()->count();
+                $unscheduledCount = max(0, $group->number_of_lessons - $scheduledCount);
+                
+                return [
+                    'id' => $group->id,
+                    'name' => $group->name,
+                    'subject_id' => $group->subject_id,
+                    'subject_name' => $group->subject?->name ?? '—',
+                    'teacher_id' => $group->teacher_login_key_id,
+                    'teacher_name' => $group->teacherLoginKey?->full_name ?? '—',
+                    'room_id' => $group->room_id,
+                    'room_number' => $group->room?->number,
+                    'room_name' => $group->room?->name,
+                    'students_count' => $studentsCount,
+                    'scheduled_count' => $scheduledCount,
+                    'unscheduled_count' => $unscheduledCount,
+                ];
+            })
+            ->sortBy('name')
+            ->values();
+
         return view('admin.timetables.teacher-view', [
             'school' => $school,
             'timetable' => $timetable,
@@ -249,7 +280,174 @@ class TimetableController extends Controller
             'maxRows' => $maxRows,
             'grid' => $grid,
             'unscheduled' => $unscheduled,
+            'groups' => $groups,
         ]);
+    }
+
+    public function studentView(School $school, Timetable $timetable, int $student)
+    {
+        $user = auth()->user();
+        if (!$user->isSupervisor() && !$user->isSchoolAdmin($school->id)) {
+            abort(403, 'Jūs neturite prieigos prie šios mokyklos.');
+        }
+        if (!$user->isSupervisor()) {
+            $activeSchoolId = session('active_school_id');
+            if ($activeSchoolId && $activeSchoolId !== $school->id) {
+                abort(403, 'Galite redaguoti tik aktyvią mokyklą. Pirmiausia pasirinkite ją iš meniu.');
+            }
+            if (!$activeSchoolId) {
+                session(['active_school_id' => $school->id]);
+            }
+        }
+        abort_unless($timetable->school_id === $school->id, 404);
+
+        $days = ['Mon' => 'Pirmadienis', 'Tue' => 'Antradienis', 'Wed' => 'Trečiadienis', 'Thu' => 'Ketvirtadienis', 'Fri' => 'Penktadienis'];
+        $dayCaps = [
+            'Mon' => $timetable->max_lessons_monday ?? 9,
+            'Tue' => $timetable->max_lessons_tuesday ?? 9,
+            'Wed' => $timetable->max_lessons_wednesday ?? 9,
+            'Thu' => $timetable->max_lessons_thursday ?? 9,
+            'Fri' => $timetable->max_lessons_friday ?? 9,
+        ];
+
+        // Fetch student
+        $studentModel = $school->loginKeys()->where('type','student')->findOrFail($student);
+
+        // Initialize empty grid [slot][day]
+        $grid = [];
+        $maxRows = max($dayCaps);
+        for ($i=1;$i<=$maxRows;$i++){ $grid[$i] = []; }
+
+        // Pull all slots for groups this student is in
+        $slots = $timetable->slots()
+            ->whereHas('group', function($q) use ($student){
+                $q->whereHas('students', function($sq) use ($student){
+                    $sq->where('login_key_id', $student);
+                });
+            })
+            ->with(['group.subject','group.room','group.teacherLoginKey'])
+            ->get();
+
+        foreach ($slots as $s) {
+            $g = $s->group;
+            if (!$g) continue;
+            $grid[(int)$s->slot][$s->day] = [
+                'slot_id' => $s->id,
+                'group_id' => $g->id,
+                'group' => $g->name,
+                'subject' => $g->subject?->name,
+                'room' => $g->room?->number ? ($g->room->number.' '.$g->room->name) : null,
+                'room_number' => $g->room?->number,
+                'room_name' => $g->room?->name,
+                'teacher_id' => $g->teacher_login_key_id,
+                'teacher_name' => $g->teacherLoginKey?->full_name,
+                'student_id' => $student,
+                'student_name' => $studentModel->full_name,
+            ];
+        }
+
+        // Unscheduled groups for this student
+        $unscheduled = [];
+        if (is_array($timetable->generation_report) && !empty($timetable->generation_report['unscheduled'])) {
+            foreach ($timetable->generation_report['unscheduled'] as $u) {
+                if (($u['remaining_lessons'] ?? 0) > 0) {
+                    // Check if student is in this group
+                    if (isset($u['group_id'])) {
+                        $group = $timetable->groups()->find($u['group_id']);
+                        if ($group && $group->students()->where('login_key_id', $student)->exists()) {
+                            $unscheduled[] = $u;
+                        }
+                    }
+                }
+            }
+        }
+
+        return view('admin.timetables.student-view', [
+            'school' => $school,
+            'timetable' => $timetable,
+            'student' => $studentModel,
+            'days' => $days,
+            'dayCaps' => $dayCaps,
+            'maxRows' => $maxRows,
+            'grid' => $grid,
+            'unscheduled' => $unscheduled,
+        ]);
+    }
+
+    public function allTeachersWorkingDays(School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $teachers = $school->loginKeys()
+            ->where('type', 'teacher')
+            ->get();
+
+        $data = [];
+        foreach ($teachers as $teacher) {
+            $workingDays = $timetable->teacherWorkingDays()
+                ->where('teacher_login_key_id', $teacher->id)
+                ->pluck('day_of_week')
+                ->toArray();
+
+            $data[] = [
+                'teacher_id' => $teacher->id,
+                'teacher_name' => $teacher->full_name,
+                'working_days' => $workingDays,
+            ];
+        }
+
+        return response()->json($data);
+    }
+
+    public function getTeacherWorkingDays(School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $teachers = $school->loginKeys()
+            ->where('type', 'teacher')
+            ->get();
+
+        $data = [];
+        foreach ($teachers as $teacher) {
+            $workingDays = $timetable->teacherWorkingDays()
+                ->where('teacher_login_key_id', $teacher->id)
+                ->pluck('day_of_week')
+                ->toArray();
+
+            $data[] = [
+                'teacher_id' => $teacher->id,
+                'teacher_name' => $teacher->full_name,
+                'working_days' => $workingDays,
+            ];
+        }
+
+        return response()->json($data);
+    }
+
+    public function updateTeacherWorkingDays(Request $request, School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        
+        $validated = $request->validate([
+            'teacher_id' => 'required|integer',
+            'working_days' => 'required|array',
+            'working_days.*' => 'integer|between:1,5',
+        ]);
+
+        // Delete existing working days for this teacher
+        $timetable->teacherWorkingDays()
+            ->where('teacher_login_key_id', $validated['teacher_id'])
+            ->delete();
+
+        // Create new working day entries
+        foreach ($validated['working_days'] as $day) {
+            $timetable->teacherWorkingDays()->create([
+                'teacher_login_key_id' => $validated['teacher_id'],
+                'day_of_week' => $day,
+            ]);
+        }
+
+        return response()->json(['success' => true]);
     }
 
     public function unscheduled(School $school, Timetable $timetable)
@@ -407,6 +605,7 @@ class TimetableController extends Controller
                 'group' => $group->name,
                 'subject' => $group->subject?->name,
                 'room' => $group->room?->number ? ($group->room->number.' '.$group->room->name) : null,
+                'room_number' => $group->room?->number,
                 'slot_id' => $slotModel->id,
                 'teacher_id' => $group->teacherLoginKey?->id,
                 'teacher_name' => $group->teacherLoginKey?->full_name,
@@ -571,6 +770,7 @@ class TimetableController extends Controller
                 'group' => $newGroup->name,
                 'subject' => $newGroup->subject?->name,
                 'room' => $newRoom->number . ' ' . $newRoom->name,
+                'room_number' => $newRoom->number,
                 'slot_id' => $slotModel->id,
                 'teacher_id' => $newGroup->teacherLoginKey?->id,
                 'teacher_name' => $newGroup->teacherLoginKey?->full_name,
@@ -619,6 +819,7 @@ class TimetableController extends Controller
                 'group' => $group->name,
                 'subject' => $group->subject?->name,
                 'room' => $group->room?->number ? ($group->room->number.' '.$group->room->name) : null,
+                'room_number' => $group->room?->number,
                 'slot_id' => $slotModel->id,
             ]]);
         }
@@ -743,6 +944,7 @@ class TimetableController extends Controller
                     'group' => $group->name,
                     'subject' => $group->subject?->name,
                     'room' => $group->room?->number ? ($group->room->number.' '.$group->room->name) : null,
+                    'room_number' => $group->room?->number,
                     'slot_id' => $slotModel->id,
                     'teacher_name' => $group->teacherLoginKey?->full_name,
                 ],
@@ -750,6 +952,7 @@ class TimetableController extends Controller
                     'group' => $targetSlot->group->name,
                     'subject' => $targetSlot->group->subject?->name,
                     'room' => $targetSlot->group->room?->number ? ($targetSlot->group->room->number.' '.$targetSlot->group->room->name) : null,
+                    'room_number' => $targetSlot->group->room?->number,
                     'slot_id' => $targetSlot->id,
                     'day' => $sourceDay,
                     'slot' => $sourceSlot,
@@ -784,6 +987,7 @@ class TimetableController extends Controller
                 'group' => $group->name,
                 'subject' => $group->subject?->name,
                 'room' => $group->room?->number ? ($group->room->number.' '.$group->room->name) : null,
+                'room_number' => $group->room?->number,
                 'slot_id' => $slotModel->id,
                 'teacher_name' => $group->teacherLoginKey?->full_name,
             ],
@@ -1292,5 +1496,76 @@ class TimetableController extends Controller
         abort_unless($timetable->school_id === $school->id, 404);
         $timetable->delete();
         return redirect()->route('schools.timetables.index', $school)->with('success', 'Tvarkaraštis pašalintas');
+    }
+
+    public function roomView(School $school, Timetable $timetable, Room $room)
+    {
+        $user = auth()->user();
+        if (!$user->isSupervisor() && !$user->isSchoolAdmin($school->id)) {
+            abort(403, 'Jūs neturite prieigos prie šios mokyklos.');
+        }
+        if (!$user->isSupervisor()) {
+            $activeSchoolId = session('active_school_id');
+            if ($activeSchoolId && $activeSchoolId !== $school->id) {
+                abort(403, 'Galite redaguoti tik aktyvią mokyklą. Pirmiausia pasirinkite ją iš meniu.');
+            }
+            if (!$activeSchoolId) {
+                session(['active_school_id' => $school->id]);
+            }
+        }
+        abort_unless($timetable->school_id === $school->id && $room->school_id === $school->id, 404);
+
+        $days = ['Monday' => 'Pirmadienis', 'Tuesday' => 'Antradienis', 'Wednesday' => 'Trečiadienis', 'Thursday' => 'Ketvirtadienis', 'Friday' => 'Penktadienis'];
+
+        // Fetch all slots for this room
+        $slots = TimetableSlot::where('timetable_id', $timetable->id)
+            ->whereHas('group', function($q) use ($room) {
+                $q->where('room_id', $room->id);
+            })
+            ->with(['group.subject', 'group.teacher'])
+            ->get();
+
+        // Initialize grid by day and hour
+        $grid = [];
+        $maxHour = 0;
+        
+        foreach ($slots as $slot) {
+            $day = $slot->day;
+            $hour = (int)$slot->hour;
+            
+            if (!isset($grid[$day])) {
+                $grid[$day] = [];
+            }
+            
+            $grid[$day][$hour] = [
+                'group' => $slot->group->name,
+                'subject' => $slot->group->subject?->pavadinimas ?? '—',
+                'teacher_name' => $slot->group->teacher?->full_name ?? '—',
+            ];
+            
+            if ($hour > $maxHour) {
+                $maxHour = $hour;
+            }
+        }
+        
+        if ($maxHour === 0) $maxHour = 6;
+
+        // Organize by hour and day
+        $slotsByHour = [];
+        for ($h = 1; $h <= $maxHour; $h++) {
+            $slotsByHour[$h] = [];
+            foreach ($days as $dayCode => $dayLabel) {
+                $slotsByHour[$h][$dayCode] = $grid[$dayCode][$h] ?? null;
+            }
+        }
+
+        return view('admin.timetables.room-view', [
+            'school' => $school,
+            'timetable' => $timetable,
+            'room' => $room,
+            'days' => $days,
+            'maxHour' => $maxHour,
+            'slots' => $slotsByHour,
+        ]);
     }
 }
