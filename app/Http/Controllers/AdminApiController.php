@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\LoginKey;
 use App\Models\SchoolClass;
 use App\Models\Timetable;
+use App\Models\TimetableSlot;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -224,5 +225,76 @@ class AdminApiController extends Controller
             'grid' => $grid,
             'days' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
         ]);
+    }
+
+    /**
+     * Get all groups for a timetable
+     */
+    public function timetableGroups($timetableId)
+    {
+        $user = Auth::user();
+        $timetable = Timetable::findOrFail($timetableId);
+
+        // Authorization
+        if (!$user->isSupervisor()) {
+            $activeSchoolId = (int) session('active_school_id');
+            if (!$activeSchoolId || $activeSchoolId !== (int) $timetable->school_id || !$user->isSchoolAdmin($timetable->school_id)) {
+                abort(403);
+            }
+        }
+
+        $groups = $timetable->groups()
+            ->with(['subject', 'teacherLoginKey'])
+            ->orderBy('name')
+            ->get()
+            ->map(function ($group) {
+                return [
+                    'id' => $group->id,
+                    'name' => $group->name,
+                    'subject' => $group->subject?->name ?? '',
+                    'teacher' => $group->teacherLoginKey?->full_name ?? '',
+                ];
+            });
+
+        return response()->json(['data' => $groups]);
+    }
+
+    /**
+     * Get groups scheduled at a specific day and slot across the school timetable
+     */
+    public function groupsBySlot($timetableId, $day, $slot)
+    {
+        $user = Auth::user();
+        $timetable = Timetable::findOrFail($timetableId);
+
+        // Authorization
+        if (!$user->isSupervisor()) {
+            $activeSchoolId = (int) session('active_school_id');
+            if (!$activeSchoolId || $activeSchoolId !== (int) $timetable->school_id || !$user->isSchoolAdmin($timetable->school_id)) {
+                abort(403);
+            }
+        }
+
+        // Normalize inputs
+        $day = strtoupper(substr($day, 0, 3)); // Mon/Tue/Wed/Thu/Fri
+        $slot = (int) $slot;
+
+        $slots = TimetableSlot::where('timetable_id', $timetable->id)
+            ->where('day', $day)
+            ->where('slot', $slot)
+            ->with(['group.subject', 'group.teacherLoginKey'])
+            ->get();
+
+        // Unique groups
+        $groups = $slots->pluck('group')->filter()->unique('id')->values()->map(function ($group) {
+            return [
+                'id' => $group->id,
+                'name' => $group->name,
+                'subject' => $group->subject?->name ?? '',
+                'teacher' => $group->teacherLoginKey?->full_name ?? '',
+            ];
+        });
+
+        return response()->json(['data' => $groups]);
     }
 }

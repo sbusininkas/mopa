@@ -453,6 +453,133 @@
         gap: 8px;
     }
 
+    /* Group selector modal */
+    .group-selector-modal {
+        position: absolute;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        padding: 12px;
+        z-index: 1050;
+        min-width: 250px;
+        max-width: 400px;
+    }
+
+    .group-selector-modal-title {
+        font-weight: 600;
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+    }
+
+    .group-selector-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .group-selector-item {
+        padding: 8px;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        margin-bottom: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 0.85rem;
+    }
+
+    .group-selector-item:hover {
+        background-color: #f0f0f0;
+        border-color: #0d6efd;
+    }
+
+    /* Orange highlight for preview changes */
+    .timetable-cell.preview-change {
+        background-color: #fff3cd !important;
+        border: 2px solid #ffc107 !important;
+        position: relative;
+    }
+
+    .preview-change-badge {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        background-color: #ff9800;
+        color: white;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        font-size: 0.7rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+    }
+
+    /* Cell interaction styles */
+    .timetable-cell-clickable {
+        cursor: pointer;
+        position: relative;
+    }
+
+    .timetable-cell-clickable:hover {
+        background-color: rgba(13, 110, 253, 0.1) !important;
+    }
+
+    .cell-info-popup {
+        position: fixed;
+        background: white;
+        border: 2px solid #0d6efd;
+        border-radius: 8px;
+        padding: 12px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        z-index: 1040;
+        min-width: 280px;
+        max-width: 350px;
+    }
+
+    .cell-info-popup-title {
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #0d6efd;
+    }
+
+    .cell-info-lesson {
+        padding: 6px 0;
+        border-bottom: 1px solid #e0e0e0;
+        font-size: 0.85rem;
+    }
+
+    .cell-info-lesson:last-child {
+        border-bottom: none;
+    }
+
+    .cell-info-lesson-name {
+        font-weight: 500;
+        color: #333;
+    }
+
+    .cell-info-lesson-teacher {
+        color: #666;
+        font-size: 0.8rem;
+    }
+
+    .cell-info-action-btn {
+        background: none;
+        border: 1px solid #0d6efd;
+        color: #0d6efd;
+        padding: 4px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.75rem;
+        margin-top: 4px;
+        transition: all 0.2s ease;
+    }
+
+    .cell-info-action-btn:hover {
+        background-color: #0d6efd;
+        color: white;
+    }
+
     .room-number-link {
         color: #0d6efd;
         cursor: pointer;
@@ -551,6 +678,19 @@
         transform: scale(1.2);
     }
     }
+
+    /* Per-cell check icon */
+    .cell-check-btn {
+        border: none;
+        background: transparent;
+        color: #198754;
+        padding: 0;
+        margin-left: 4px;
+        cursor: pointer;
+        line-height: 1;
+    }
+    .cell-check-btn:hover { color: #157347; }
+    .student-timetable-card-responsive.active { outline: 2px solid #0d6efd; }
 
     .class-lesson-group strong {
         display: block;
@@ -808,33 +948,53 @@
         const studentSearch = document.getElementById('studentSearch');
         const timetableContainer = document.getElementById('timetableContainer');
         const viewClassBtn = document.getElementById('viewClassTimetableBtn');
+        const schoolId = {{ $school->id }};
 
-        selectedStudents = [];
+        // Preserve previously selected students - don't clear them
+        // selectedStudents array is kept intact
         currentClassStudents = [];
         currentClassName = className;
         timetableContainer.innerHTML = '';
 
-        if (!classId) {
-            studentListContainer.style.display = 'none';
-            studentSearch.disabled = true;
-            viewClassBtn.disabled = true;
-            return;
-        }
-
         try {
-            const response = await fetch(`/admin/api/classes/${classId}/students`);
-            const data = await response.json();
-            const students = data.data || [];
+            let students = [];
+            
+            if (!classId) {
+                // Load all students from all classes
+                const response = await fetch(`/admin/api/schools/${schoolId}/students`);
+                const data = await response.json();
+                students = data.data || [];
+                
+                studentListContainer.style.display = 'block';
+                studentSearch.disabled = false;
+                viewClassBtn.disabled = true; // Disable class timetable button when all classes are selected
+            } else {
+                // Load students for specific class
+                const response = await fetch(`/admin/api/classes/${classId}/students`);
+                const data = await response.json();
+                students = data.data || [];
+                
+                studentListContainer.style.display = 'block';
+                studentSearch.disabled = false;
+                viewClassBtn.disabled = false;
+            }
             
             currentClassStudents = students;
 
             studentList.innerHTML = '';
             students.forEach(student => {
+                // Check if this student was previously selected
+                const isSelected = selectedStudents.some(s => s.id === student.id);
+                
                 const div = document.createElement('div');
                 div.className = 'student-checkbox-item';
+                if (isSelected) {
+                    div.classList.add('selected');
+                }
+                
                 div.innerHTML = `
                     <input type="checkbox" class="student-checkbox" id="student-${student.id}" 
-                           data-student-id="${student.id}" data-student-name="${student.full_name}">
+                           data-student-id="${student.id}" data-student-name="${student.full_name}" ${isSelected ? 'checked' : ''}>
                     <label for="student-${student.id}">${student.full_name}</label>
                     <button class="btn btn-sm btn-outline-primary" title="Atidaryti mokininio tvarkaraštį" 
                             onclick="event.stopPropagation(); openStudentTimetable(${student.id}, '${student.full_name}')" 
@@ -845,10 +1005,7 @@
                 studentList.appendChild(div);
             });
 
-            studentListContainer.style.display = 'block';
-            studentSearch.disabled = false;
             studentSearch.value = '';
-            viewClassBtn.disabled = false;
 
             // Setup search filter - search across all classes
             studentSearch.addEventListener('input', function() {
@@ -1407,15 +1564,20 @@
                                 `<small><a class="room-number-link" onclick="openRoomTimetable(${lessonData.room_id})" title="Peržiūrėti kabineto tvarkaraštį">${lessonData.room}</a></small>` : 
                                 (lessonData.room ? `<small>${lessonData.room}</small>` : '');
                             html += `<td class="timetable-cell lesson-cell-small comparison-cell" data-student-id="${result.id}" data-day="${day}" data-slot="${lessonNum}" data-group-id="${lessonData.group_id}" data-subject="${lessonData.subject}" data-teacher="${lessonData.teacher}" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-trigger="hover" title="Mokytojas: ${lessonData.teacher}" style="cursor: pointer; position: relative;">
-                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;">
-                                    <div onclick="event.stopPropagation(); openGroupDetails(${lessonData.group_id})" style="flex: 1;">
+                                <div style=\"display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;\">
+                                    <div onclick=\"event.stopPropagation(); openGroupDetails(${lessonData.group_id})\" style=\"flex: 1;\">
                                         <strong>${groupName}</strong>
                                         ${roomLink}
                                     </div>
+                                    <button class=\"cell-check-btn\" title=\"Patikrinti šį langelį\" onclick=\"openCheckForCell('${day}', ${lessonNum}, ${result.id}, this); event.stopPropagation(); return false;\"><i class=\"bi bi-check2-circle\"></i></button>
                                 </div>
                             </td>`;
                         } else {
-                            html += `<td class="timetable-cell lesson-cell-small comparison-cell" data-student-id="${result.id}" data-day="${day}" data-slot="${lessonNum}"></td>`;
+                            html += `<td class=\"timetable-cell lesson-cell-small comparison-cell\" data-student-id=\"${result.id}\" data-day=\"${day}\" data-slot=\"${lessonNum}\" style=\"position: relative;\">
+                                <div style=\"display:flex; justify-content:flex-end;\">
+                                    <button class=\"cell-check-btn\" title=\"Patikrinti šį langelį\" onclick=\"openCheckForCell('${day}', ${lessonNum}, ${result.id}, this); event.stopPropagation(); return false;\"><i class=\"bi bi-check2-circle\"></i></button>
+                                </div>
+                            </td>`;
                         }
                     });
                     
@@ -1448,6 +1610,9 @@
             document.getElementById('clearComparisonBtn').addEventListener('click', function() {
                 clearComparison();
             });
+            
+            // Initialize cell interactions (click to view/add groups)
+            initializeCellInteractions();
             
             // Show modal
             const modal = new bootstrap.Modal(document.getElementById('selectedStudentsTimetablesModal'));
@@ -1552,7 +1717,246 @@
         document.getElementById('clearComparisonBtn').style.display = 'none';
     }
 
+    // Cell interaction - show what lessons are at this time and allow adding groups
+    function initializeCellInteractions() {
+        const schoolId = {{ $school->id }};
+        const timetableId = {{ $timetable->id }};
+        
+        document.querySelectorAll('.comparison-cell').forEach(cell => {
+            cell.classList.add('timetable-cell-clickable');
+            
+            cell.addEventListener('click', async function(e) {
+                e.stopPropagation();
+                
+                const day = this.dataset.day;
+                const slot = this.dataset.slot;
+                const studentId = parseInt(this.dataset.studentId);
+                
+                if (!day || !slot) return;
+                
+                // Create popup showing all lessons at this time
+                const popup = document.createElement('div');
+                popup.className = 'cell-info-popup';
+                popup.style.top = (e.clientY - 20) + 'px';
+                popup.style.left = (e.clientX + 10) + 'px';
+                
+                // Find all cells with same day/slot
+                const sameCells = Array.from(document.querySelectorAll(`.comparison-cell[data-day="${day}"][data-slot="${slot}"]`));
+                const uniqueLessons = {};
+                
+                sameCells.forEach(c => {
+                    if (c.dataset.subject) {
+                        const key = `${c.dataset.subject}-${c.dataset.teacher}`;
+                        if (!uniqueLessons[key]) {
+                            uniqueLessons[key] = {
+                                subject: c.dataset.subject,
+                                teacher: c.dataset.teacher,
+                                students: new Set()
+                            };
+                        }
+                        uniqueLessons[key].students.add(c.parentElement.parentElement.querySelector('h6')?.textContent || 'Unknown');
+                    }
+                });
+                
+                let html = `<div class="cell-info-popup-title">Pamoka ${slot} - ${day}</div>`;
+                
+                if (Object.keys(uniqueLessons).length === 0) {
+                    html += '<div style="color: #666; font-size: 0.85rem;">Nėra pamokų šią valandą</div>';
+                } else {
+                    Object.values(uniqueLessons).forEach(lesson => {
+                        html += `
+                            <div class="cell-info-lesson">
+                                <div class="cell-info-lesson-name">${lesson.subject}</div>
+                                <div class="cell-info-lesson-teacher">Mokytojas: ${lesson.teacher}</div>
+                                <div style="font-size: 0.8rem; color: #999; margin-top: 2px;">
+                                    Mokiniai: ${Array.from(lesson.students).join(', ')}
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                // Add button to add another group
+                html += `<button class="cell-info-action-btn" onclick="showGroupSelector('${day}', ${slot})">
+                    <i class="bi bi-plus"></i> Pridėti grupę
+                </button>`;
+                
+                popup.innerHTML = html;
+                document.body.appendChild(popup);
+                
+                // Close popup on outside click
+                setTimeout(() => {
+                    document.addEventListener('click', function closePopup(e) {
+                        if (e.target.closest('.cell-info-popup') === null) {
+                            popup.remove();
+                            document.removeEventListener('click', closePopup);
+                        }
+                    });
+                }, 100);
+            });
+        });
+    }
+
+    // Triggered from per-cell check icon
+    async function openCheckForCell(day, slot, studentId, el) {
+        // mark this student's card as active
+        document.querySelectorAll('.student-timetable-card-responsive').forEach(card => card.classList.remove('active'));
+        const card = el.closest('.student-timetable-card-responsive');
+        if (card) card.classList.add('active');
+        
+        const timetableId = {{ $timetable->id }};
+        
+        // Close any existing popups
+        document.querySelectorAll('.cell-info-popup, .group-selector-modal').forEach(el => el.remove());
+        
+        // Create group selector modal
+        const modal = document.createElement('div');
+        modal.className = 'group-selector-modal';
+        modal.innerHTML = `
+            <div class="group-selector-modal-title">
+                Pamokos vykstančios mokykloje (Pamoka ${slot}, ${getDayName(day)})
+            </div>
+            <input type="text" class="form-control form-control-sm" id="groupSearch" placeholder="Ieškoti..." style="margin-bottom: 10px; font-size: 0.85rem;">
+            <div class="group-selector-list" id="groupList">Kraunama...</div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Close on outside click
+        setTimeout(() => {
+            document.addEventListener('click', function closeModal(e) {
+                if (!e.target.closest('.group-selector-modal')) {
+                    modal.remove();
+                    document.removeEventListener('click', closeModal);
+                }
+            });
+        }, 100);
+        
+        try {
+            // Fetch groups scheduled at this time
+            const response = await fetch(`/admin/api/timetables/${timetableId}/groups/slot/${day}/${slot}`);
+            const data = await response.json();
+            const groups = data.data || [];
+            
+            const groupList = modal.querySelector('#groupList');
+            
+            if (groups.length === 0) {
+                groupList.innerHTML = '<div style="color: #666; font-size: 0.85rem; padding: 10px; text-align: center;">Šiuo metu nėra suplanuotų pamokų</div>';
+                return;
+            }
+            
+            const renderGroups = (searchTerm = '') => {
+                const filtered = groups.filter(g => 
+                    g.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (g.subject && g.subject.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                    (g.teacher && g.teacher.toLowerCase().includes(searchTerm.toLowerCase()))
+                );
+                
+                if (filtered.length === 0) {
+                    groupList.innerHTML = '<div style="color: #666; font-size: 0.85rem; padding: 10px; text-align: center;">Nerasta</div>';
+                    return;
+                }
+                
+                groupList.innerHTML = filtered.map(group => {
+                    const groupNameEsc = escapeHtml(group.name);
+                    const subjectEsc = escapeHtml(group.subject || '');
+                    const teacherEsc = escapeHtml(group.teacher || '');
+                    return `
+                        <div class="group-selector-item" onclick="addGroupToCell(${group.id}, '${groupNameEsc}', '${subjectEsc}', '${teacherEsc}', '${day}', ${slot}, ${studentId})">
+                            <strong>${groupNameEsc}</strong>
+                            <small style="display: block; color: #666; margin-top: 2px;">
+                                ${subjectEsc || 'N/A'} • ${teacherEsc || 'N/A'}
+                            </small>
+                        </div>
+                    `;
+                }).join('');
+            };
+            
+            renderGroups();
+            
+            // Search functionality
+            modal.querySelector('#groupSearch').addEventListener('input', function() {
+                renderGroups(this.value);
+            });
+            
+        } catch (err) {
+            console.error('Error fetching groups:', err);
+            modal.querySelector('#groupList').innerHTML = '<div style="color: red; font-size: 0.85rem; padding: 10px;">Klaida įkeliant grupes</div>';
+        }
+    }
+    
+    function getDayName(abbr) {
+        const names = {Mon: 'Pirmadienis', Tue: 'Antradienis', Wed: 'Trečiadienis', Thu: 'Ketvirtadienis', Fri: 'Penktadienis'};
+        return names[abbr] || abbr;
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Add group to cell (preview with yellow highlighting)
+    function addGroupToCell(groupId, groupName, subject, teacher, day, slot, studentId) {
+        // Close modals
+        document.querySelectorAll('.cell-info-popup, .group-selector-modal').forEach(el => el.remove());
+        
+        // Find the cell for the current student being viewed
+        const currentStudentCard = document.querySelector('.student-timetable-card-responsive.active');
+        if (!currentStudentCard) {
+            alert('Pasirinkite mokinį iš kurės tvarkaraščio norite pridėti grupę');
+            return;
+        }
+        
+        const cell = currentStudentCard.querySelector(`.comparison-cell[data-day="${day}"][data-slot="${slot}"]`);
+        
+        if (!cell) {
+            alert('Langelis nerastas');
+            return;
+        }
+        
+        // Add content to cell with yellow background
+        const cellContent = cell.querySelector('div');
+        if (cellContent) {
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'preview-lesson-insert';
+            previewDiv.style.marginTop = '4px';
+            previewDiv.style.padding = '6px';
+            previewDiv.style.backgroundColor = '#fff9e6';
+            previewDiv.style.border = '2px solid #ffc107';
+            previewDiv.style.borderRadius = '4px';
+            previewDiv.style.fontSize = '0.7rem';
+            previewDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2px;">
+                    <strong style="color: #856404; font-size: 0.75rem;">${groupName}</strong>
+                    <button class="btn btn-xs p-0" onclick="removeGroupPreview(this)" title="Pašalinti peržiūrą" style="background: none; border: none; color: #856404; cursor: pointer; line-height: 1; font-size: 1.2rem;">×</button>
+                </div>
+                <small style="display: block; color: #856404; line-height: 1.3;">${subject || ''}</small>
+                <small style="display: block; color: #856404; opacity: 0.8; line-height: 1.3;">${teacher || ''}</small>
+            `;
+            cellContent.appendChild(previewDiv);
+        }
+        
+        cell.classList.add('preview-change');
+    }
+
+    // Remove group preview
+    function removeGroupPreview(btn) {
+        const previewDiv = btn.closest('.preview-lesson-insert');
+        if (previewDiv) {
+            previewDiv.remove();
+            
+            // Check if there are still preview items
+            const cell = btn.closest('.comparison-cell');
+            const hasPreview = cell && cell.querySelector('.preview-lesson-insert');
+            if (cell && !hasPreview) {
+                cell.classList.remove('preview-change');
+            }
+        }
+    }
+
     // Show timetable comparison view
 
 </script>
+
 
