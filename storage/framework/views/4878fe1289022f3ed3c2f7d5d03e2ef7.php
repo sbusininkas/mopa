@@ -3,6 +3,23 @@
 .hover-bg-light:hover {
     background-color: #f8f9fa !important;
 }
+
+.group-name-link,
+.unscheduled-group-link,
+.unscheduled-subject-link {
+    color: #0d6efd;
+    text-decoration: none;
+    border-bottom: 1px dashed #0d6efd;
+    transition: all 0.2s ease;
+}
+
+.group-name-link:hover,
+.unscheduled-group-link:hover,
+.unscheduled-subject-link:hover {
+    color: #0b5ed7;
+    border-bottom: 1px solid #0b5ed7;
+    text-decoration: none;
+}
 </style>
 <div class="container">
     <?php if(session('success')): ?>
@@ -23,6 +40,8 @@
 
     <?php echo $__env->make('admin.timetables.partials.current-settings', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 
+    <?php echo $__env->make('admin.timetables.partials.class-timetable-review', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+
     <?php echo $__env->make('admin.timetables.partials.unscheduled-lessons', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 
     <?php echo $__env->make('admin.timetables.partials.settings-modal', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
@@ -36,5 +55,6 @@
 
 <?php echo $__env->make('admin.timetables.partials.scripts', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 <?php $__env->stopSection(); ?>
+
 
 <?php echo $__env->make('layouts.admin', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH C:\xampp\htdocs\mopa\resources\views/admin/timetables/show.blade.php ENDPATH**/ ?>

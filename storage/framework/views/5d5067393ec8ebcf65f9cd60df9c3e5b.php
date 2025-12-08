@@ -1,14 +1,12 @@
-@extends('layouts.admin')
-
-@section('content')
+<?php $__env->startSection('content'); ?>
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2><i class="bi bi-person-badge"></i> {{ $student->full_name }} — Tvarkaraštis</h2>
+        <h2><i class="bi bi-person-badge"></i> <?php echo e($student->full_name); ?> — Tvarkaraštis</h2>
         <div class="btn-group">
-            <a class="btn btn-outline-secondary" href="{{ route('schools.timetables.show', [$school, $timetable]) }}">
+            <a class="btn btn-outline-secondary" href="<?php echo e(route('schools.timetables.show', [$school, $timetable])); ?>">
                 <i class="bi bi-arrow-left"></i> Atgal į tvarkaraštį
             </a>
-            <a class="btn btn-outline-primary" href="{{ route('schools.timetables.show', [$school, $timetable]) }}">
+            <a class="btn btn-outline-primary" href="<?php echo e(route('schools.timetables.show', [$school, $timetable])); ?>">
                 <i class="bi bi-calendar3"></i> Tvarkaraščio nustatymai
             </a>
         </div>
@@ -18,36 +16,38 @@
     <div class="card mb-3" id="unscheduledPanel">
         <div class="card-header p-2"><strong>Nesuplanuotos pamokos (šiam mokiniui)</strong></div>
         <div class="card-body p-2" style="max-height: 150px; overflow:auto;">
-            @forelse(($unscheduled ?? []) as $u)
+            <?php $__empty_1 = true; $__currentLoopData = ($unscheduled ?? []); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $u): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
                 <div class="unscheduled-item mb-1 d-flex align-items-center"
                      data-kind="unscheduled"
-                     data-group-id="{{ $u['group_id'] }}"
-                     data-group-name="{{ $u['group_name'] ?? $u['group'] ?? '' }}"
-                     data-subject-name="{{ $u['subject_name'] ?? $u['subject'] ?? '' }}"
-                     data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
-                     data-teacher-name="{{ $u['teacher_name'] ?? $u['teacher'] ?? '' }}"
-                     data-remaining="{{ $u['remaining_lessons'] }}">
+                     data-group-id="<?php echo e($u['group_id']); ?>"
+                     data-group-name="<?php echo e($u['group_name'] ?? $u['group'] ?? ''); ?>"
+                     data-subject-name="<?php echo e($u['subject_name'] ?? $u['subject'] ?? ''); ?>"
+                     data-teacher-id="<?php echo e($u['teacher_login_key_id'] ?? ''); ?>"
+                     data-teacher-name="<?php echo e($u['teacher_name'] ?? $u['teacher'] ?? ''); ?>"
+                     data-remaining="<?php echo e($u['remaining_lessons']); ?>">
                     <div class="flex-grow-1">
                         <div class="unscheduled-title">
-                            <a href="{{ route('schools.timetables.groups.details', [$school, $timetable, $u['group_id']]) }}" 
+                            <a href="<?php echo e(route('schools.timetables.groups.details', [$school, $timetable, $u['group_id']])); ?>" 
                                class="unscheduled-group-link" 
                                onclick="event.stopPropagation()">
-                                {{ $u['group_name'] ?? $u['group'] ?? 'Grupė' }}
+                                <?php echo e($u['group_name'] ?? $u['group'] ?? 'Grupė'); ?>
+
                             </a>
-                            <span class="badge bg-primary ms-2 remaining-badge">{{ $u['remaining_lessons'] }}</span>
+                            <span class="badge bg-primary ms-2 remaining-badge"><?php echo e($u['remaining_lessons']); ?></span>
                         </div>
                         <div class="unscheduled-meta">
-                            <a href="{{ route('schools.timetables.subject-groups', [$school, $timetable, $u['subject_name'] ?? $u['subject'] ?? '']) }}" 
+                            <a href="<?php echo e(route('schools.timetables.subject-groups', [$school, $timetable, $u['subject_name'] ?? $u['subject'] ?? ''])); ?>" 
                                class="unscheduled-subject-link"
                                onclick="event.stopPropagation()">
-                                {{ $u['subject_name'] ?? $u['subject'] ?? '' }}
+                                <?php echo e($u['subject_name'] ?? $u['subject'] ?? ''); ?>
+
                             </a>
                         </div>
                     </div>
                 </div>
-            @empty
+            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
                 <span class="text-muted small">Nėra neužpildytų pamokų šiam mokiniui</span>
-            @endforelse
+            <?php endif; ?>
         </div>
     </div>
 
@@ -55,21 +55,21 @@
     <div class="card">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-bordered align-middle mb-0" id="studentGrid" data-student-id="{{ $student->id }}">
+                <table class="table table-bordered align-middle mb-0" id="studentGrid" data-student-id="<?php echo e($student->id); ?>">
                     <thead class="table-dark">
                         <tr>
                             <th style="width:60px" class="text-center">#</th>
-                            @foreach($days as $code => $label)
-                                <th class="text-center">{{ $label }}</th>
-                            @endforeach
+                            <?php $__currentLoopData = $days; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $code => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <th class="text-center"><?php echo e($label); ?></th>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </tr>
                     </thead>
                     <tbody>
-                        @for($row=1; $row <= $maxRows; $row++)
+                        <?php for($row=1; $row <= $maxRows; $row++): ?>
                             <tr>
-                                <td class="text-center fw-bold sticky-col-row">{{ $row }}</td>
-                                @foreach($days as $code => $label)
-                                    @php 
+                                <td class="text-center fw-bold sticky-col-row"><?php echo e($row); ?></td>
+                                <?php $__currentLoopData = $days; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $code => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                    <?php 
                                         $cell = $grid[$row][$code] ?? null;
                                         if ($cell) {
                                             $subject = $cell['subject'] ?? '—';
@@ -90,19 +90,19 @@
                                             .'</div>';
                                             $tooltipB64 = base64_encode($tooltipHtml);
                                         }
-                                    @endphp
-                                    <td class="text-center lesson-col timetable-cell" style="min-width:220px" data-day="{{ $code }}" data-slot="{{ $row }}" data-student-id="{{ $student->id }}">
-                                        @if($cell)
+                                    ?>
+                                    <td class="text-center lesson-col timetable-cell" style="min-width:220px" data-day="<?php echo e($code); ?>" data-slot="<?php echo e($row); ?>" data-student-id="<?php echo e($student->id); ?>">
+                                        <?php if($cell): ?>
                                             <span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:pointer;" 
-                                                data-tooltip-b64="{{ $tooltipB64 }}">
-                                                {{ $cell['group'] }}{{ $roomNumber ? ' (' . $roomNumber . ')' : '' }}<br/>
-                                                <small>{{ $subject }}</small>
+                                                data-tooltip-b64="<?php echo e($tooltipB64); ?>">
+                                                <?php echo e($cell['group']); ?><?php echo e($roomNumber ? ' (' . $roomNumber . ')' : ''); ?><br/>
+                                                <small><?php echo e($subject); ?></small>
                                             </span>
-                                        @endif
+                                        <?php endif; ?>
                                     </td>
-                                @endforeach
+                                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                             </tr>
-                        @endfor
+                        <?php endfor; ?>
                     </tbody>
                 </table>
             </div>
@@ -125,18 +125,10 @@
         min-height: 80px;
         vertical-align: middle;
         background-color: #ffffff;
-        cursor: pointer;
-        transition: background-color 0.2s ease;
     }
     
     .timetable-cell:hover {
         background-color: #f8f9fa;
-    }
-    
-    .timetable-cell.highlighted {
-        background-color: #fff3cd;
-        border: 2px solid #ffc107;
-        box-shadow: inset 0 0 0 1px #ffc107;
     }
     
     .badge {
@@ -247,7 +239,7 @@
     }
 </style>
 
-@push('scripts')
+<?php $__env->startPush('scripts'); ?>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
     // UTF-8 safe base64 decoder
@@ -288,31 +280,9 @@ document.addEventListener('DOMContentLoaded', function(){
             document.addEventListener('click', removeTooltip);
         });
     });
-
-    // Hover handler to highlight cells with same day/slot across timetables
-    const cells = document.querySelectorAll('.timetable-cell');
-    cells.forEach(cell => {
-        cell.addEventListener('mouseenter', function() {
-            const day = this.dataset.day;
-            const slot = this.dataset.slot;
-            
-            // Highlight all cells with same day and slot
-            if (day && slot) {
-                document.querySelectorAll(`.timetable-cell[data-day="${day}"][data-slot="${slot}"]`).forEach(c => {
-                    c.classList.add('highlighted');
-                });
-            }
-        });
-
-        cell.addEventListener('mouseleave', function() {
-            // Remove all highlights
-            document.querySelectorAll('.timetable-cell.highlighted').forEach(c => {
-                c.classList.remove('highlighted');
-            });
-        });
-    });
 });
 </script>
-@endpush
+<?php $__env->stopPush(); ?>
 
-@endsection
+<?php $__env->stopSection(); ?>
+<?php echo $__env->make('layouts.admin', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH C:\xampp\htdocs\mopa\resources\views/admin/timetables/student-view.blade.php ENDPATH**/ ?>

@@ -201,6 +201,48 @@ class TimetableGroupController extends Controller
             ->orderBy('login_keys.first_name')
             ->get();
 
+        // Build teacher's timetable with group lessons highlighted
+        $teacherTimetable = [];
+        $groupSlots = [];
+        $days = ['Mon' => 'Pirmadienis', 'Tue' => 'Antradienis', 'Wed' => 'Trečiadienis', 'Thu' => 'Ketvirtadienis', 'Fri' => 'Penktadienis'];
+
+        if ($group->teacherLoginKey) {
+            // Get all teacher's slots
+            $allSlots = $timetable->slots()
+                ->whereHas('group', function($q) use ($group) {
+                    $q->where('teacher_login_key_id', $group->teacherLoginKey->id);
+                })
+                ->with(['group.subject', 'group.room'])
+                ->get();
+
+            // Get this group's slots for highlighting
+            $groupSlots = $timetable->slots()
+                ->where('timetable_group_id', $group->id)
+                ->get()
+                ->keyBy(function($slot) {
+                    return $slot->day . '_' . $slot->slot;
+                });
+
+            // Initialize grid
+            $maxRows = 9;
+            for ($i = 1; $i <= $maxRows; $i++) {
+                $teacherTimetable[$i] = [];
+                foreach ($days as $dayCode => $dayLabel) {
+                    $teacherTimetable[$i][$dayCode] = null;
+                }
+            }
+
+            // Fill grid
+            foreach ($allSlots as $slot) {
+                $teacherTimetable[$slot->slot][$slot->day] = [
+                    'group_name' => $slot->group->name,
+                    'subject' => $slot->group->subject?->name ?? '—',
+                    'room' => $slot->group->room?->name ?? '—',
+                    'is_group_lesson' => isset($groupSlots[$slot->day . '_' . $slot->slot]),
+                ];
+            }
+        }
+
         return view('admin.timetables.group-show', [
             'school' => $school,
             'timetable' => $timetable,
@@ -209,6 +251,8 @@ class TimetableGroupController extends Controller
             'teachers' => $teachers,
             'rooms' => $rooms,
             'allStudents' => $allStudents,
+            'teacherTimetable' => $teacherTimetable,
+            'days' => $days,
         ]);
     }
 

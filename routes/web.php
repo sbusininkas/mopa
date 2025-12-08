@@ -165,6 +165,8 @@ Route::middleware(['auth', 'school.admin.or.supervisor'])->group(function () {
     Route::get('/admin/api/classes/{class}/students', [\App\Http\Controllers\AdminApiController::class, 'studentsByClass'])->name('admin.api.classes.students');
     Route::get('/admin/api/schools/{school}/students', [\App\Http\Controllers\AdminApiController::class, 'allStudents'])->name('admin.api.schools.students');
     Route::get('/admin/api/schools/{school}/students/search', [\App\Http\Controllers\AdminApiController::class, 'searchStudents'])->name('admin.api.schools.students.search');
+    Route::get('/admin/api/schools/{schoolId}/active-timetable', [\App\Http\Controllers\AdminApiController::class, 'getActiveTimetable'])->name('admin.api.schools.active-timetable');
+    Route::get('/admin/api/timetables/{timetableId}/student/{studentId}', [\App\Http\Controllers\AdminApiController::class, 'getStudentTimetable'])->name('admin.api.timetables.student');
 });
 
 // New routes without {school} parameter - using active school from session

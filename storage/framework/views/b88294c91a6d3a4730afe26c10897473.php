@@ -1,14 +1,12 @@
-@extends('layouts.admin')
-
-@section('content')
+<?php $__env->startSection('content'); ?>
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2><i class="bi bi-person-badge"></i> {{ $teacher->full_name }} — Tvarkaraštis</h2>
+        <h2><i class="bi bi-person-badge"></i> <?php echo e($teacher->full_name); ?> — Tvarkaraštis</h2>
         <div class="btn-group">
-            <a class="btn btn-outline-secondary" href="{{ route('schools.timetables.teachers-view', [$school, $timetable]) }}">
+            <a class="btn btn-outline-secondary" href="<?php echo e(route('schools.timetables.teachers-view', [$school, $timetable])); ?>">
                 <i class="bi bi-arrow-left"></i> Atgal į mokytojų sąrašą
             </a>
-            <a class="btn btn-outline-primary" href="{{ route('schools.timetables.show', [$school, $timetable]) }}">
+            <a class="btn btn-outline-primary" href="<?php echo e(route('schools.timetables.show', [$school, $timetable])); ?>">
                 <i class="bi bi-calendar3"></i> Tvarkaraščio nustatymai
             </a>
         </div>
@@ -18,35 +16,36 @@
     <div class="card mb-3" id="unscheduledPanel">
         <div class="card-header p-2"><strong>Nesuplanuotos grupės (šiam mokytojui)</strong></div>
         <div class="card-body p-2" style="max-height: 150px; overflow:auto;">
-            @forelse(($unscheduled ?? []) as $u)
+            <?php $__empty_1 = true; $__currentLoopData = ($unscheduled ?? []); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $u): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
                 <div class="unscheduled-item mb-1 d-flex align-items-center" draggable="true"
                      data-kind="unscheduled"
-                     data-group-id="{{ $u['group_id'] }}"
-                     data-group-name="{{ $u['group_name'] ?? $u['group'] ?? '' }}"
-                     data-subject-name="{{ $u['subject_name'] ?? $u['subject'] ?? '' }}"
-                     data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
-                     data-teacher-name="{{ $u['teacher_name'] ?? $u['teacher'] ?? '' }}"
-                     data-remaining="{{ $u['remaining_lessons'] }}">
+                     data-group-id="<?php echo e($u['group_id']); ?>"
+                     data-group-name="<?php echo e($u['group_name'] ?? $u['group'] ?? ''); ?>"
+                     data-subject-name="<?php echo e($u['subject_name'] ?? $u['subject'] ?? ''); ?>"
+                     data-teacher-id="<?php echo e($u['teacher_login_key_id'] ?? ''); ?>"
+                     data-teacher-name="<?php echo e($u['teacher_name'] ?? $u['teacher'] ?? ''); ?>"
+                     data-remaining="<?php echo e($u['remaining_lessons']); ?>">
                     <div class="flex-grow-1">
                         <div class="unscheduled-title">
-                            {{ $u['group_name'] ?? $u['group'] ?? 'Grupė' }}
-                            <span class="badge bg-primary ms-2 remaining-badge">{{ $u['remaining_lessons'] }}</span>
+                            <?php echo e($u['group_name'] ?? $u['group'] ?? 'Grupė'); ?>
+
+                            <span class="badge bg-primary ms-2 remaining-badge"><?php echo e($u['remaining_lessons']); ?></span>
                         </div>
                         <div class="unscheduled-meta">
-                            <span class="unscheduled-subject">{{ $u['subject_name'] ?? $u['subject'] ?? '' }}</span>
+                            <span class="unscheduled-subject"><?php echo e($u['subject_name'] ?? $u['subject'] ?? ''); ?></span>
                         </div>
                     </div>
                     <div class="ms-2">
                         <button type="button" class="btn btn-outline-info btn-sm" 
-                                onclick="findAvailableSlots({{ $u['group_id'] }}, '{{ addslashes($u['group_name'] ?? $u['group'] ?? '') }}', '{{ addslashes($u['subject_name'] ?? $u['subject'] ?? '') }}', {{ $u['teacher_login_key_id'] ?? 'null' }})"
+                                onclick="findAvailableSlots(<?php echo e($u['group_id']); ?>, '<?php echo e(addslashes($u['group_name'] ?? $u['group'] ?? '')); ?>', '<?php echo e(addslashes($u['subject_name'] ?? $u['subject'] ?? '')); ?>', <?php echo e($u['teacher_login_key_id'] ?? 'null'); ?>)"
                                 title="Rasti laisvus langelius">
                             <i class="bi bi-search"></i>
                         </button>
                     </div>
                 </div>
-            @empty
+            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
                 <span class="text-muted small">Nėra neužpildytų pamokų šiam mokytojui</span>
-            @endforelse
+            <?php endif; ?>
         </div>
         <div class="card-footer d-flex justify-content-between align-items-center p-1 small text-muted">
             <span>Tempkite ant pasirinktų langelių</span>
@@ -58,21 +57,21 @@
     <div class="card">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-bordered align-middle mb-0" id="teacherGrid" data-teacher-id="{{ $teacher->id }}">
+                <table class="table table-bordered align-middle mb-0" id="teacherGrid" data-teacher-id="<?php echo e($teacher->id); ?>">
                     <thead class="table-dark">
                         <tr>
                             <th style="width:60px" class="text-center">#</th>
-                            @foreach($days as $code => $label)
-                                <th class="text-center">{{ $label }}</th>
-                            @endforeach
+                            <?php $__currentLoopData = $days; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $code => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <th class="text-center"><?php echo e($label); ?></th>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </tr>
                     </thead>
                     <tbody>
-                        @for($row=1; $row <= $maxRows; $row++)
+                        <?php for($row=1; $row <= $maxRows; $row++): ?>
                             <tr>
-                                <td class="text-center fw-bold sticky-col-row">{{ $row }}</td>
-                                @foreach($days as $code => $label)
-                                    @php 
+                                <td class="text-center fw-bold sticky-col-row"><?php echo e($row); ?></td>
+                                <?php $__currentLoopData = $days; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $code => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                    <?php 
                                         $cell = $grid[$row][$code] ?? null;
                                         if ($cell) {
                                             $subject = $cell['subject'] ?? '—';
@@ -93,28 +92,28 @@
                                             .'</div>';
                                             $tooltipB64 = base64_encode($tooltipHtml);
                                         }
-                                    @endphp
-                                    <td class="text-center lesson-col drop-target timetable-cell" style="min-width:220px" data-day="{{ $code }}" data-slot="{{ $row }}" data-teacher-id="{{ $teacher->id }}">
-                                        @if($cell)
+                                    ?>
+                                    <td class="text-center lesson-col drop-target timetable-cell" style="min-width:220px" data-day="<?php echo e($code); ?>" data-slot="<?php echo e($row); ?>" data-teacher-id="<?php echo e($teacher->id); ?>">
+                                        <?php if($cell): ?>
                                             <span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" draggable="true"
-                                                data-tooltip-b64="{{ $tooltipB64 }}"
+                                                data-tooltip-b64="<?php echo e($tooltipB64); ?>"
                                                 data-kind="scheduled"
-                                                data-slot-id="{{ $cell['slot_id'] }}"
-                                                data-group-id="{{ $cell['group_id'] }}"
-                                                data-teacher-id="{{ $teacher->id }}"
-                                                data-group-name="{{ $cell['group'] }}"
-                                                data-subject-name="{{ $cell['subject'] ?? '' }}"
-                                                data-student-count="{{ $cell['student_count'] ?? 0 }}"
-                                                data-room-number="{{ $cell['room_number'] ?? '' }}"
-                                                data-teacher-name="{{ $cell['teacher_name'] ?? '' }}"
-                                            >{{ $cell['group'] }}{{ $roomNumber ? ' (' . $roomNumber . ')' : '' }}<br/><small>{{ $subject }}</small></span>
-                                        @else
+                                                data-slot-id="<?php echo e($cell['slot_id']); ?>"
+                                                data-group-id="<?php echo e($cell['group_id']); ?>"
+                                                data-teacher-id="<?php echo e($teacher->id); ?>"
+                                                data-group-name="<?php echo e($cell['group']); ?>"
+                                                data-subject-name="<?php echo e($cell['subject'] ?? ''); ?>"
+                                                data-student-count="<?php echo e($cell['student_count'] ?? 0); ?>"
+                                                data-room-number="<?php echo e($cell['room_number'] ?? ''); ?>"
+                                                data-teacher-name="<?php echo e($cell['teacher_name'] ?? ''); ?>"
+                                            ><?php echo e($cell['group']); ?><?php echo e($roomNumber ? ' (' . $roomNumber . ')' : ''); ?><br/><small><?php echo e($subject); ?></small></span>
+                                        <?php else: ?>
                                             <span class="text-muted">—</span>
-                                        @endif
+                                        <?php endif; ?>
                                     </td>
-                                @endforeach
+                                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                             </tr>
-                        @endfor
+                        <?php endfor; ?>
                     </tbody>
                 </table>
             </div>
@@ -122,10 +121,10 @@
     </div>
 
     <!-- Groups list section (like subject groups view) -->
-    @if(count($groups ?? []) > 0)
+    <?php if(count($groups ?? []) > 0): ?>
         <div class="card mt-4">
             <div class="card-header bg-light">
-                <h5 class="mb-0"><i class="bi bi-collection"></i> {{ $teacher->full_name }} — Visos grupės</h5>
+                <h5 class="mb-0"><i class="bi bi-collection"></i> <?php echo e($teacher->full_name); ?> — Visos grupės</h5>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -142,74 +141,76 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach($groups as $group)
+                            <?php $__currentLoopData = $groups; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $group): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <tr>
                                     <td>
-                                        <a href="{{ route('schools.timetables.groups.details', [$school, $timetable, $group['id']]) }}" class="text-decoration-none">
-                                            <strong>{{ $group['name'] }}</strong>
+                                        <a href="<?php echo e(route('schools.timetables.groups.details', [$school, $timetable, $group['id']])); ?>" class="text-decoration-none">
+                                            <strong><?php echo e($group['name']); ?></strong>
                                         </a>
                                     </td>
                                     <td class="text-center">
-                                        @if($group['subject_id'] && $group['subject_name'])
-                                            <a href="{{ route('schools.timetables.subject-groups', [$school, $timetable, $group['subject_name']]) }}" 
+                                        <?php if($group['subject_id'] && $group['subject_name']): ?>
+                                            <a href="<?php echo e(route('schools.timetables.subject-groups', [$school, $timetable, $group['subject_name']])); ?>" 
                                                class="text-decoration-none link-primary"
                                                title="Atidaryti dalyko grupes">
-                                                <small>{{ $group['subject_name'] }}</small>
+                                                <small><?php echo e($group['subject_name']); ?></small>
                                             </a>
-                                        @else
-                                            <small>{{ $group['subject_name'] ?? '—' }}</small>
-                                        @endif
+                                        <?php else: ?>
+                                            <small><?php echo e($group['subject_name'] ?? '—'); ?></small>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="text-center">
-                                        @if($group['room_number'])
-                                            <span class="badge bg-dark">{{ $group['room_number'] }}
-                                                @if($group['room_name'])
-                                                    {{ $group['room_name'] }}
-                                                @endif
+                                        <?php if($group['room_number']): ?>
+                                            <span class="badge bg-dark"><?php echo e($group['room_number']); ?>
+
+                                                <?php if($group['room_name']): ?>
+                                                    <?php echo e($group['room_name']); ?>
+
+                                                <?php endif; ?>
                                             </span>
-                                        @else
+                                        <?php else: ?>
                                             <span class="text-muted">—</span>
-                                        @endif
+                                        <?php endif; ?>
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge bg-info text-dark">{{ $group['students_count'] }}</span>
+                                        <span class="badge bg-info text-dark"><?php echo e($group['students_count']); ?></span>
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge bg-success">{{ $group['scheduled_count'] }}</span>
+                                        <span class="badge bg-success"><?php echo e($group['scheduled_count']); ?></span>
                                     </td>
                                     <td class="text-center">
-                                        @if($group['unscheduled_count'] > 0)
-                                            <span class="badge bg-warning text-dark">{{ $group['unscheduled_count'] }}</span>
-                                        @else
+                                        <?php if($group['unscheduled_count'] > 0): ?>
+                                            <span class="badge bg-warning text-dark"><?php echo e($group['unscheduled_count']); ?></span>
+                                        <?php else: ?>
                                             <span class="badge bg-secondary">0</span>
-                                        @endif
+                                        <?php endif; ?>
                                     </td>
                                     <td class="text-center">
-                                        <a href="{{ route('schools.timetables.groups.details', [$school, $timetable, $group['id']]) }}" 
+                                        <a href="<?php echo e(route('schools.timetables.groups.details', [$school, $timetable, $group['id']])); ?>" 
                                            class="btn btn-sm btn-outline-primary" 
                                            title="Atidaryti grupę">
                                             <i class="bi bi-pencil"></i>
                                         </a>
                                     </td>
                                 </tr>
-                            @endforeach
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </tbody>
                     </table>
                 </div>
             </div>
             <div class="card-footer bg-light">
                 <ul class="mb-0 small text-muted">
-                    <li><strong>Iš viso grupių:</strong> {{ count($groups) }}</li>
-                    <li><strong>Iš viso mokinių:</strong> {{ collect($groups)->sum('students_count') }}</li>
-                    <li><strong>Iš viso suplanuotų pamokų:</strong> {{ collect($groups)->sum('scheduled_count') }}</li>
-                    <li><strong>Iš viso nesuplanuotų pamokų:</strong> {{ collect($groups)->sum('unscheduled_count') }}</li>
+                    <li><strong>Iš viso grupių:</strong> <?php echo e(count($groups)); ?></li>
+                    <li><strong>Iš viso mokinių:</strong> <?php echo e(collect($groups)->sum('students_count')); ?></li>
+                    <li><strong>Iš viso suplanuotų pamokų:</strong> <?php echo e(collect($groups)->sum('scheduled_count')); ?></li>
+                    <li><strong>Iš viso nesuplanuotų pamokų:</strong> <?php echo e(collect($groups)->sum('unscheduled_count')); ?></li>
                 </ul>
             </div>
         </div>
-    @endif
+    <?php endif; ?>
 </div>
 
-@endsection
+<?php $__env->stopSection(); ?>
 
 <!-- Group Info Notification Panel -->
 <div id="groupInfoNotification" class="group-info-notification" style="display: none;">
@@ -255,7 +256,7 @@
     </div>
 </div>
 
-@push('scripts')
+<?php $__env->startPush('scripts'); ?>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
     const grid = document.getElementById('teacherGrid');
@@ -370,7 +371,7 @@ document.addEventListener('DOMContentLoaded', function(){
                 
                 try {
                     // Try to move (this will check for swap needs)
-                    const resp = await fetch(`{{ route('schools.timetables.move-slot', [$school, $timetable]) }}`, {
+                    const resp = await fetch(`<?php echo e(route('schools.timetables.move-slot', [$school, $timetable])); ?>`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -387,7 +388,7 @@ document.addEventListener('DOMContentLoaded', function(){
                         if (!confirmed) return;
                         
                         // Perform swap
-                        const swapResp = await fetch(`{{ route('schools.timetables.move-slot', [$school, $timetable]) }}`, {
+                        const swapResp = await fetch(`<?php echo e(route('schools.timetables.move-slot', [$school, $timetable])); ?>`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -414,7 +415,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                     swapData.swappedHtml.group,
                                     swapData.swappedHtml.subject ?? '—',
                                     swapData.swappedHtml.room ?? '—',
-                                    '{{ $teacher->full_name }}',
+                                    '<?php echo e($teacher->full_name); ?>',
                                     dayNames[origDay] ?? origDay,
                                     origSlot
                                 );
@@ -439,7 +440,7 @@ document.addEventListener('DOMContentLoaded', function(){
                             swapData.html.group,
                             swapData.html.subject ?? '—',
                             swapData.html.room ?? '—',
-                            '{{ $teacher->full_name }}',
+                            '<?php echo e($teacher->full_name); ?>',
                             dayNames[day] ?? day,
                             slot
                         );
@@ -471,7 +472,7 @@ document.addEventListener('DOMContentLoaded', function(){
                         data.html.group,
                         data.html.subject ?? '—',
                         data.html.room ?? '—',
-                        '{{ $teacher->full_name }}',
+                        '<?php echo e($teacher->full_name); ?>',
                         dayNames[day] ?? day,
                         slot
                     );
@@ -499,7 +500,7 @@ document.addEventListener('DOMContentLoaded', function(){
                     const confirmed = await showConfirmDialog(groupId, groupName, subjectName, day, slot, conflicts);
                     if (!confirmed) return;
                     if (conflicts.hasConflicts) return;
-                    const resp = await fetch(`{{ route('schools.timetables.manual-slot', [$school, $timetable]) }}`, {
+                    const resp = await fetch(`<?php echo e(route('schools.timetables.manual-slot', [$school, $timetable])); ?>`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -518,7 +519,7 @@ document.addEventListener('DOMContentLoaded', function(){
                         data.html.group,
                         data.html.subject ?? '—',
                         data.html.room ?? '—',
-                        '{{ $teacher->full_name }}',
+                        '<?php echo e($teacher->full_name); ?>',
                         dayNames[day] ?? day,
                         slot
                     );
@@ -560,7 +561,7 @@ document.addEventListener('DOMContentLoaded', function(){
             const modal = document.createElement('div');
             modal.className = 'modal fade';
             modal.tabIndex = -1;
-            const manageUrl = `{{ route('schools.timetables.show', [$school, $timetable]) }}?openGroupEdit=${groupId || ''}`;
+            const manageUrl = `<?php echo e(route('schools.timetables.show', [$school, $timetable])); ?>?openGroupEdit=${groupId || ''}`;
             
             // Process conflicts to show as interactive buttons
             let conflictsHtml = '';
@@ -787,7 +788,7 @@ function showErrorModal(title, message) {
             hint.className = 'alert alert-info mt-3 mb-0';
             hint.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Tikrinama kabineto prieinamumas...';
             try {
-                const resp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
+                const resp = await fetch(`<?php echo e(route('schools.timetables.check-conflict', [$school, $timetable])); ?>`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -899,7 +900,7 @@ function showGroupInfo(groupName, groupId, scheduledCount) {
     document.getElementById('groupInfoTotal').textContent = totalLessons;
 
     // Set action links
-    const basePath = `/admin/schools/{{ $school->id }}/timetables/{{ $timetable->id }}/groups/${groupId}`;
+    const basePath = `/admin/schools/<?php echo e($school->id); ?>/timetables/<?php echo e($timetable->id); ?>/groups/${groupId}`;
     const viewLink = document.getElementById('groupInfoViewLink');
     const editLink = document.getElementById('groupInfoEditLink');
     if (viewLink) viewLink.href = basePath + '/details';
@@ -985,7 +986,7 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
 
 async function openGroupEditModal(groupId) {
     try {
-        const resp = await fetch(`{{ route('schools.timetables.groups.edit-data', [$school, $timetable, ':groupId']) }}`.replace(':groupId', groupId));
+        const resp = await fetch(`<?php echo e(route('schools.timetables.groups.edit-data', [$school, $timetable, ':groupId'])); ?>`.replace(':groupId', groupId));
         const data = await resp.json();
         
         if (!resp.ok || !data.group) {
@@ -996,7 +997,7 @@ async function openGroupEditModal(groupId) {
         const group = data.group;
         
         // Construct update URL
-        const updateUrl = `{{ route('schools.timetables.groups.update', [$school, $timetable, ':groupId']) }}`.replace(':groupId', groupId);
+        const updateUrl = `<?php echo e(route('schools.timetables.groups.update', [$school, $timetable, ':groupId'])); ?>`.replace(':groupId', groupId);
         
         // Create edit modal
         const modal = document.createElement('div');
@@ -1011,7 +1012,7 @@ async function openGroupEditModal(groupId) {
                     </div>
                     <form method="POST" id="editGroupForm">
                         <div class="modal-body">
-                            <input type="hidden" name="_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="_token" value="<?php echo e(csrf_token()); ?>">
                             <input type="hidden" name="_method" value="PUT">
                             <div class="mb-3">
                                 <label class="form-label">Pavadinimas</label>
@@ -1082,7 +1083,7 @@ async function openGroupEditModal(groupId) {
                     method: 'POST',
                     body: formData,
                     headers: {
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-CSRF-TOKEN': '<?php echo e(csrf_token()); ?>',
                         'Accept': 'application/json'
                     }
                 });
@@ -1109,7 +1110,7 @@ async function openGroupEditModal(groupId) {
 
 async function unscheduleLesson(slotId, badgeElement) {
     try {
-        const resp = await fetch(`{{ route('schools.timetables.unschedule-slot', [$school, $timetable]) }}`, {
+        const resp = await fetch(`<?php echo e(route('schools.timetables.unschedule-slot', [$school, $timetable])); ?>`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1234,7 +1235,7 @@ async function checkConflicts(groupId, teacherId, day, slot, tempRoomId = null) 
             body.temp_room_id = tempRoomId;
         }
         
-        const resp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
+        const resp = await fetch(`<?php echo e(route('schools.timetables.check-conflict', [$school, $timetable])); ?>`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1272,7 +1273,7 @@ async function findAvailableSlots(groupId, groupName, subjectName, teacherId) {
     }
 
     // Fetch rooms once
-    const roomsResp = await fetch(`{{ route('schools.timetables.groups.edit-data', [$school, $timetable, ':groupId']) }}`.replace(':groupId', groupId));
+    const roomsResp = await fetch(`<?php echo e(route('schools.timetables.groups.edit-data', [$school, $timetable, ':groupId'])); ?>`.replace(':groupId', groupId));
     const roomsData = await roomsResp.json();
     const availableRooms = roomsData.rooms || [];
     const currentRoomId = roomsData.group?.room_id;
@@ -1300,7 +1301,7 @@ async function findAvailableSlots(groupId, groupName, subjectName, teacherId) {
     // Bulk request
     let resp; let data;
     try {
-        resp = await fetch(`{{ route('schools.timetables.bulk-conflicts', [$school, $timetable]) }}`, {
+        resp = await fetch(`<?php echo e(route('schools.timetables.bulk-conflicts', [$school, $timetable])); ?>`, {
             method: 'POST',
             headers: { 'Content-Type':'application/json','X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]').getAttribute('content'),'Accept':'application/json' },
             body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, items })
@@ -1717,7 +1718,7 @@ function showAvailableSlotsModal(groupId, groupName, subjectName, teacherId, slo
 
 async function addLessonToSlot(groupId, teacherId, day, slot, roomId) {
     try {
-        const resp = await fetch(`{{ route('schools.timetables.manual-slot', [$school, $timetable]) }}`, {
+        const resp = await fetch(`<?php echo e(route('schools.timetables.manual-slot', [$school, $timetable])); ?>`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1749,7 +1750,7 @@ async function addLessonWithNewRoom(groupId, teacherId, day, slot, selectId) {
     }
     
     // First, check if the new room is available at this time
-    const checkResp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
+    const checkResp = await fetch(`<?php echo e(route('schools.timetables.check-conflict', [$school, $timetable])); ?>`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1779,7 +1780,7 @@ async function addLessonWithNewRoom(groupId, teacherId, day, slot, selectId) {
     
     // Create a copy of the group with new room
     try {
-        const updateResp = await fetch(`{{ route('schools.timetables.groups.update', [$school, $timetable, ':groupId']) }}`.replace(':groupId', groupId), {
+        const updateResp = await fetch(`<?php echo e(route('schools.timetables.groups.update', [$school, $timetable, ':groupId'])); ?>`.replace(':groupId', groupId), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1890,33 +1891,6 @@ function clearAvailabilityMarks(){
     document.querySelectorAll('.unscheduled-item.active-group').forEach(el=> el.classList.remove('active-group'));
 }
 
-// Click handler to highlight cells with same day/slot
-function initializeCellClickHandlers(){
-    document.querySelectorAll('.timetable-cell').forEach(cell => {
-        cell.addEventListener('mouseenter', function(e) {
-            // Don't trigger if clicking on draggable badge
-            if (e.target.closest('[draggable="true"]')) return;
-            
-            const day = this.dataset.day;
-            const slot = this.dataset.slot;
-            
-            // Highlight all cells with same day and slot
-            if (day && slot) {
-                document.querySelectorAll(`.timetable-cell[data-day="${day}"][data-slot="${slot}"]`).forEach(c => {
-                    c.classList.add('time-slot-highlighted');
-                });
-            }
-        });
-
-        cell.addEventListener('mouseleave', function() {
-            // Remove all highlights
-            document.querySelectorAll('.timetable-cell.time-slot-highlighted').forEach(c => {
-                c.classList.remove('time-slot-highlighted');
-            });
-        });
-    });
-}
-
 async function openEditGroupModal(groupId, buttonElement) {
     if (!groupId) return;
     
@@ -1927,7 +1901,7 @@ async function openEditGroupModal(groupId, buttonElement) {
     }
     
     try {
-        const resp = await fetch(`{{ route('schools.timetables.groups.edit-data', [$school, $timetable, ':groupId']) }}`.replace(':groupId', groupId));
+        const resp = await fetch(`<?php echo e(route('schools.timetables.groups.edit-data', [$school, $timetable, ':groupId'])); ?>`.replace(':groupId', groupId));
         const data = await resp.json();
         
         const editModal = document.createElement('div');
@@ -2011,7 +1985,7 @@ async function openEditGroupModal(groupId, buttonElement) {
             formData.forEach((value, key) => updateData[key] = value);
             
             try {
-                const updateResp = await fetch(`{{ route('schools.timetables.groups.update', [$school, $timetable, ':groupId']) }}`.replace(':groupId', groupId), {
+                const updateResp = await fetch(`<?php echo e(route('schools.timetables.groups.update', [$school, $timetable, ':groupId'])); ?>`.replace(':groupId', groupId), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2191,12 +2165,6 @@ if (window.bootstrap) {
     outline-offset: -1px;
 }
 
-.timetable-cell.time-slot-highlighted {
-    background-color: #fff3cd !important;
-    border: 2px solid #ffc107 !important;
-    box-shadow: inset 0 0 0 1px #ffc107;
-}
-
 /* Group info notification */
 .group-info-notification {
     position: fixed;
@@ -2255,4 +2223,6 @@ if (window.bootstrap) {
     font-weight: 600;
 }
 </style>
-@endpush
+<?php $__env->stopPush(); ?>
+
+<?php echo $__env->make('layouts.admin', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH C:\xampp\htdocs\mopa\resources\views/admin/timetables/teacher-view.blade.php ENDPATH**/ ?>

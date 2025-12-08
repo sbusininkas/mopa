@@ -117,3 +117,4 @@ class ActiveSchoolController extends Controller
         return view('admin.schools.edit-contacts', compact('school'));
     }
 }
+ 

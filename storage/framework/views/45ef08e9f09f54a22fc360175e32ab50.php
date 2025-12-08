@@ -82,8 +82,22 @@
                             }
                         ?>
                         <tr class="unscheduled-item" data-group-id="<?php echo e($item['group_id']); ?>">
-                            <td><?php echo e($item['group_name']); ?></td>
-                            <td><?php echo e($item['subject_name']); ?></td>
+                            <td>
+                                <a href="<?php echo e(route('schools.timetables.groups.details', [$school, $timetable, $item['group_id']])); ?>" 
+                                   class="text-decoration-none unscheduled-group-link"
+                                   title="Atidaryti grupę">
+                                    <?php echo e($item['group_name']); ?>
+
+                                </a>
+                            </td>
+                            <td>
+                                <a href="<?php echo e(route('schools.timetables.subject-groups', [$school, $timetable, $item['subject_name']])); ?>" 
+                                   class="text-decoration-none unscheduled-subject-link"
+                                   title="Peržiūrėti visas šio dalyko grupes">
+                                    <?php echo e($item['subject_name']); ?>
+
+                                </a>
+                            </td>
                             <td>
                                 <?php if(!empty($item['teacher_name']) && !empty($item['teacher_login_key_id'])): ?>
                                     <a href="<?php echo e(route('schools.timetables.teacher', [$school, $timetable, $item['teacher_login_key_id']])); ?>" 

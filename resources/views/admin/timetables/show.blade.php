@@ -41,6 +41,8 @@
 
     @include('admin.timetables.partials.current-settings')
 
+    @include('admin.timetables.partials.class-timetable-review')
+
     @include('admin.timetables.partials.unscheduled-lessons')
 
     @include('admin.timetables.partials.settings-modal')
@@ -54,3 +56,4 @@
 
 @include('admin.timetables.partials.scripts')
 @endsection
+

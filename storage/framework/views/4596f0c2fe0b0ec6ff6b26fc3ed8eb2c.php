@@ -1,21 +1,19 @@
-@extends('layouts.admin')
-
-@section('content')
+<?php $__env->startSection('content'); ?>
 <!-- Toast Container -->
 <div id="toastContainer" style="position: fixed; top: 20px; right: 20px; z-index: 9999;"></div>
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2><i class="bi bi-collection"></i> Grupė: {{ $group->name }}</h2>
+        <h2><i class="bi bi-collection"></i> Grupė: <?php echo e($group->name); ?></h2>
         <div>
-            <a href="{{ route('schools.timetables.show', [$school, $timetable]) }}" class="btn btn-outline-secondary">
+            <a href="<?php echo e(route('schools.timetables.show', [$school, $timetable])); ?>" class="btn btn-outline-secondary">
                 <i class="bi bi-arrow-left"></i> Atgal į tvarkaraštį
             </a>
         </div>
     </div>
 
-    @if(session('success'))
-        <div class="alert alert-success">{{ session('success') }}</div>
-    @endif
+    <?php if(session('success')): ?>
+        <div class="alert alert-success"><?php echo e(session('success')); ?></div>
+    <?php endif; ?>
 
     <div class="row g-3">
         <div class="col-lg-12">
@@ -29,53 +27,55 @@
                 <div class="card-body">
                     <dl class="row mb-0">
                         <dt class="col-sm-4">Pavadinimas</dt>
-                        <dd class="col-sm-8">{{ $group->name }}</dd>
+                        <dd class="col-sm-8"><?php echo e($group->name); ?></dd>
                         <dt class="col-sm-4">Dalykas</dt>
                         <dd class="col-sm-8">
-                            @if($group->subject)
-                                <a href="{{ route('schools.timetables.subject-groups', [$school, $timetable, $group->subject->name]) }}" class="text-decoration-none">
-                                    {{ $group->subject->name }}
+                            <?php if($group->subject): ?>
+                                <a href="<?php echo e(route('schools.timetables.subject-groups', [$school, $timetable, $group->subject->name])); ?>" class="text-decoration-none">
+                                    <?php echo e($group->subject->name); ?>
+
                                 </a>
-                            @else
+                            <?php else: ?>
                                 —
-                            @endif
+                            <?php endif; ?>
                         </dd>
                         <dt class="col-sm-4">Mokytojas</dt>
                         <dd class="col-sm-8">
-                            @if($group->teacherLoginKey)
-                                <a href="{{ route('schools.timetables.teacher', [$school, $timetable, $group->teacherLoginKey->id]) }}" class="text-decoration-none">
-                                    {{ $group->teacherLoginKey->full_name }}
+                            <?php if($group->teacherLoginKey): ?>
+                                <a href="<?php echo e(route('schools.timetables.teacher', [$school, $timetable, $group->teacherLoginKey->id])); ?>" class="text-decoration-none">
+                                    <?php echo e($group->teacherLoginKey->full_name); ?>
+
                                 </a>
-                            @else
+                            <?php else: ?>
                                 —
-                            @endif
+                            <?php endif; ?>
                         </dd>
                         <dt class="col-sm-4">Kabinetas</dt>
                         <dd class="col-sm-8">
-                            @if($group->room)
-                                <a href="{{ route('schools.timetables.room-view', [$school, $timetable, $group->room]) }}" class="text-decoration-none" target="_blank">
-                                    {{ $group->room->number }} <i class="bi bi-box-arrow-up-right" style="font-size: 0.8rem;"></i>
+                            <?php if($group->room): ?>
+                                <a href="<?php echo e(route('schools.timetables.room-view', [$school, $timetable, $group->room])); ?>" class="text-decoration-none" target="_blank">
+                                    <?php echo e($group->room->number); ?> <i class="bi bi-box-arrow-up-right" style="font-size: 0.8rem;"></i>
                                 </a>
-                            @else
+                            <?php else: ?>
                                 —
-                            @endif
+                            <?php endif; ?>
                         </dd>
                         <dt class="col-sm-4">Savaitė</dt>
-                        <dd class="col-sm-8">{{ ['all'=>'Visos','even'=>'Lyginės','odd'=>'Nelyginės'][$group->week_type] ?? '—' }}</dd>
+                        <dd class="col-sm-8"><?php echo e(['all'=>'Visos','even'=>'Lyginės','odd'=>'Nelyginės'][$group->week_type] ?? '—'); ?></dd>
                         <dt class="col-sm-4">Pamokos / savaitę</dt>
-                        <dd class="col-sm-8">{{ $group->lessons_per_week ?? 0 }}</dd>
+                        <dd class="col-sm-8"><?php echo e($group->lessons_per_week ?? 0); ?></dd>
                         <dt class="col-sm-4">Prioritetas</dt>
-                        <dd class="col-sm-8">{!! $group->is_priority ? '<span class="badge bg-warning text-dark">Taip</span>' : '<span class="badge bg-secondary">Ne</span>' !!}</dd>
+                        <dd class="col-sm-8"><?php echo $group->is_priority ? '<span class="badge bg-warning text-dark">Taip</span>' : '<span class="badge bg-secondary">Ne</span>'; ?></dd>
                     </dl>
                 </div>
             </div>
         </div>
     </div>
 
-    @if(!empty($teacherTimetable) && $group->teacherLoginKey)
+    <?php if(!empty($teacherTimetable) && $group->teacherLoginKey): ?>
     <div class="card mt-3">
         <div class="card-header">
-            <strong><i class="bi bi-person-badge"></i> {{ $group->teacherLoginKey->full_name }} — Tvarkaraštis (pažymėtos grupės pamokos)</strong>
+            <strong><i class="bi bi-person-badge"></i> <?php echo e($group->teacherLoginKey->full_name); ?> — Tvarkaraštis (pažymėtos grupės pamokos)</strong>
         </div>
         <div class="card-body p-2">
             <div class="table-responsive">
@@ -83,34 +83,34 @@
                     <thead class="table-light">
                         <tr>
                             <th style="width: 60px; text-align: center;"><strong>Pamoka</strong></th>
-                            @foreach($days as $code => $label)
-                                <th style="text-align: center; width: 140px;"><strong>{{ substr($label, 0, 3) }}</strong></th>
-                            @endforeach
+                            <?php $__currentLoopData = $days; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $code => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <th style="text-align: center; width: 140px;"><strong><?php echo e(substr($label, 0, 3)); ?></strong></th>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </tr>
                     </thead>
                     <tbody>
-                        @for($hour = 1; $hour <= 9; $hour++)
+                        <?php for($hour = 1; $hour <= 9; $hour++): ?>
                             <tr>
-                                <td style="text-align: center; font-weight: bold; vertical-align: middle;">{{ $hour }}</td>
-                                @foreach($days as $code => $label)
-                                    @php
+                                <td style="text-align: center; font-weight: bold; vertical-align: middle;"><?php echo e($hour); ?></td>
+                                <?php $__currentLoopData = $days; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $code => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                    <?php
                                         $lesson = $teacherTimetable[$hour][$code] ?? null;
                                         $isGroupLesson = $lesson && $lesson['is_group_lesson'];
-                                    @endphp
-                                    <td class="timetable-cell" style="padding: 0.3rem; min-height: 50px; text-align: center; cursor: pointer; transition: background-color 0.2s ease; {{ $isGroupLesson ? 'background-color: #fff3cd; border: 2px solid #ffc107;' : '' }}" data-day="{{ $code }}" data-slot="{{ $hour }}">
-                                        @if($lesson)
+                                    ?>
+                                    <td class="timetable-cell" style="padding: 0.3rem; min-height: 50px; text-align: center; cursor: pointer; transition: background-color 0.2s ease; <?php echo e($isGroupLesson ? 'background-color: #fff3cd; border: 2px solid #ffc107;' : ''); ?>" data-day="<?php echo e($code); ?>" data-slot="<?php echo e($hour); ?>">
+                                        <?php if($lesson): ?>
                                             <div style="font-size: 0.85rem;">
-                                                <div><strong>{{ $lesson['group_name'] }}</strong></div>
-                                                <div style="color: #666; font-size: 0.75rem;">{{ $lesson['subject'] }}</div>
-                                                <div style="color: #0d6efd; font-size: 0.75rem;">{{ $lesson['room'] }}</div>
+                                                <div><strong><?php echo e($lesson['group_name']); ?></strong></div>
+                                                <div style="color: #666; font-size: 0.75rem;"><?php echo e($lesson['subject']); ?></div>
+                                                <div style="color: #0d6efd; font-size: 0.75rem;"><?php echo e($lesson['room']); ?></div>
                                             </div>
-                                        @else
+                                        <?php else: ?>
                                             <span class="text-muted">—</span>
-                                        @endif
+                                        <?php endif; ?>
                                     </td>
-                                @endforeach
+                                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                             </tr>
-                        @endfor
+                        <?php endfor; ?>
                     </tbody>
                 </table>
             </div>
@@ -121,33 +121,34 @@
             </div>
         </div>
     </div>
-    @endif
+    <?php endif; ?>
 
     <div class="card mt-3">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <strong>Priskirti mokiniai ({{ $group->students->count() }})</strong>
+            <strong>Priskirti mokiniai (<?php echo e($group->students->count()); ?>)</strong>
             <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editGroupModal">
                 <i class="bi bi-plus-circle"></i> Pridėti
             </button>
         </div>
         <div class="card-body">
-            @forelse($group->students as $s)
+            <?php $__empty_1 = true; $__currentLoopData = $group->students; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $s): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
                 <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
                     <div>
-                        @if($s->class_name)
-                            <span class="badge bg-info me-2">{{ $s->class_name }}</span>
-                        @endif
-                        <a href="{{ route('schools.timetables.student-view', [$school, $timetable, $s->id]) }}" class="text-decoration-none">
-                            {{ $s->full_name }}
+                        <?php if($s->class_name): ?>
+                            <span class="badge bg-info me-2"><?php echo e($s->class_name); ?></span>
+                        <?php endif; ?>
+                        <a href="<?php echo e(route('schools.timetables.student-view', [$school, $timetable, $s->id])); ?>" class="text-decoration-none">
+                            <?php echo e($s->full_name); ?>
+
                         </a>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-danger remove-student-btn" data-student-id="{{ $s->id }}">
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-student-btn" data-student-id="<?php echo e($s->id); ?>">
                         <i class="bi bi-trash"></i>
                     </button>
                 </div>
-            @empty
+            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
                 <div class="text-muted text-center py-3">Nėra priskirtų mokinių</div>
-            @endforelse
+            <?php endif; ?>
         </div>
     </div>
 
@@ -159,57 +160,57 @@
             <h5 class="modal-title" id="editGroupModalLabel">Redaguoti grupę</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <form method="POST" action="{{ route('schools.timetables.groups.update', [$school, $timetable, $group]) }}">
-            @csrf
-            @method('PUT')
+          <form method="POST" action="<?php echo e(route('schools.timetables.groups.update', [$school, $timetable, $group])); ?>">
+            <?php echo csrf_field(); ?>
+            <?php echo method_field('PUT'); ?>
             <div class="modal-body">
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Pavadinimas</label>
-                        <input type="text" name="name" class="form-control" value="{{ old('name', $group->name) }}">
+                        <input type="text" name="name" class="form-control" value="<?php echo e(old('name', $group->name)); ?>">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Pamokos / savaitę</label>
-                        <input type="number" min="1" max="20" name="lessons_per_week" class="form-control" value="{{ old('lessons_per_week', $group->lessons_per_week ?? 1) }}">
+                        <input type="number" min="1" max="20" name="lessons_per_week" class="form-control" value="<?php echo e(old('lessons_per_week', $group->lessons_per_week ?? 1)); ?>">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Dalykas</label>
                         <select name="subject_id" class="form-select">
                             <option value="">—</option>
-                            @foreach($subjects as $s)
-                                <option value="{{ $s->id }}" @selected(old('subject_id', $group->subject_id)===$s->id)>{{ $s->name }}</option>
-                            @endforeach
+                            <?php $__currentLoopData = $subjects; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $s): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <option value="<?php echo e($s->id); ?>" <?php if(old('subject_id', $group->subject_id)===$s->id): echo 'selected'; endif; ?>><?php echo e($s->name); ?></option>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </select>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Mokytojas</label>
                         <select name="teacher_login_key_id" class="form-select">
                             <option value="">—</option>
-                            @foreach($teachers as $t)
-                                <option value="{{ $t->id }}" @selected(old('teacher_login_key_id', $group->teacher_login_key_id)===$t->id)>{{ $t->full_name }}</option>
-                            @endforeach
+                            <?php $__currentLoopData = $teachers; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $t): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <option value="<?php echo e($t->id); ?>" <?php if(old('teacher_login_key_id', $group->teacher_login_key_id)===$t->id): echo 'selected'; endif; ?>><?php echo e($t->full_name); ?></option>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </select>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Kabinetas</label>
                         <select name="room_id" class="form-select">
                             <option value="">—</option>
-                            @foreach($rooms as $r)
-                                <option value="{{ $r->id }}" @selected(old('room_id', $group->room_id)===$r->id)>{{ $r->number }} {{ $r->name }}</option>
-                            @endforeach
+                            <?php $__currentLoopData = $rooms; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $r): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <option value="<?php echo e($r->id); ?>" <?php if(old('room_id', $group->room_id)===$r->id): echo 'selected'; endif; ?>><?php echo e($r->number); ?> <?php echo e($r->name); ?></option>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </select>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Savaitės tipas</label>
                         <select name="week_type" class="form-select">
-                            @foreach(['all'=>'Visos','even'=>'Lyginės','odd'=>'Nelyginės'] as $val=>$label)
-                                <option value="{{ $val }}" @selected(old('week_type', $group->week_type)===$val)>{{ $label }}</option>
-                            @endforeach
+                            <?php $__currentLoopData = ['all'=>'Visos','even'=>'Lyginės','odd'=>'Nelyginės']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $val=>$label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <option value="<?php echo e($val); ?>" <?php if(old('week_type', $group->week_type)===$val): echo 'selected'; endif; ?>><?php echo e($label); ?></option>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </select>
                     </div>
                     <div class="col-md-6 d-flex align-items-end">
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="is_priority" name="is_priority" value="1" @checked(old('is_priority', $group->is_priority))>
+                            <input class="form-check-input" type="checkbox" id="is_priority" name="is_priority" value="1" <?php if(old('is_priority', $group->is_priority)): echo 'checked'; endif; ?>>
                             <label class="form-check-label" for="is_priority">Prioritetas</label>
                         </div>
                     </div>
@@ -217,7 +218,7 @@
                         <ul class="nav nav-tabs" id="studentsTab" role="tablist">
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link active" id="assigned-tab" data-bs-toggle="tab" data-bs-target="#assigned-pane" type="button" role="tab" aria-controls="assigned-pane" aria-selected="true">
-                                    <i class="bi bi-check-circle"></i> Priskirti mokiniai (<span id="assignedCount">{{ count($group->students) }}</span>)
+                                    <i class="bi bi-check-circle"></i> Priskirti mokiniai (<span id="assignedCount"><?php echo e(count($group->students)); ?></span>)
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
@@ -232,19 +233,19 @@
                                     <input type="text" class="form-control" id="assignedSearchInput" placeholder="Paieška priskirtuose...">
                                 </div>
                                 <div class="border rounded p-2" style="max-height: 300px; overflow:auto;" id="assignedList">
-                                    @foreach($group->students as $s)
-                                        <div class="d-flex justify-content-between align-items-center p-2 assigned-item" data-student-id="{{ $s->id }}" data-name="{{ $s->full_name }}" data-class="{{ $s->class_name ?? '' }}">
+                                    <?php $__currentLoopData = $group->students; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $s): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                        <div class="d-flex justify-content-between align-items-center p-2 assigned-item" data-student-id="<?php echo e($s->id); ?>" data-name="<?php echo e($s->full_name); ?>" data-class="<?php echo e($s->class_name ?? ''); ?>">
                                             <div>
-                                                @if($s->class_name)
-                                                    <span class="badge bg-light text-dark me-2">{{ $s->class_name }}</span>
-                                                @endif
-                                                <span>{{ $s->full_name }}</span>
+                                                <?php if($s->class_name): ?>
+                                                    <span class="badge bg-light text-dark me-2"><?php echo e($s->class_name); ?></span>
+                                                <?php endif; ?>
+                                                <span><?php echo e($s->full_name); ?></span>
                                             </div>
-                                            <button type="button" class="btn btn-sm btn-outline-danger remove-student-modal-btn" data-student-id="{{ $s->id }}">
+                                            <button type="button" class="btn btn-sm btn-outline-danger remove-student-modal-btn" data-student-id="<?php echo e($s->id); ?>">
                                                 <i class="bi bi-dash-circle"></i>
                                             </button>
                                         </div>
-                                    @endforeach
+                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                 </div>
                             </div>
                             <div class="tab-pane fade" id="available-pane" role="tabpanel" aria-labelledby="available-tab">
@@ -252,22 +253,22 @@
                                     <input type="text" class="form-control" id="availableSearchInput" placeholder="Paieška pagal vardą, pavardę arba klasę...">
                                 </div>
                                 <div class="border rounded p-2" style="max-height: 300px; overflow:auto;" id="availableList">
-                                    @php $assigned = $group->students->pluck('id')->all(); @endphp
-                                    @foreach($allStudents as $s)
-                                        @if(!in_array($s->id, $assigned))
-                                            <div class="d-flex justify-content-between align-items-center p-2 available-item" data-class="{{ $s->class_name ?? '' }}" data-name="{{ $s->full_name }}" data-student-id="{{ $s->id }}">
+                                    <?php $assigned = $group->students->pluck('id')->all(); ?>
+                                    <?php $__currentLoopData = $allStudents; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $s): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                        <?php if(!in_array($s->id, $assigned)): ?>
+                                            <div class="d-flex justify-content-between align-items-center p-2 available-item" data-class="<?php echo e($s->class_name ?? ''); ?>" data-name="<?php echo e($s->full_name); ?>" data-student-id="<?php echo e($s->id); ?>">
                                                 <div>
-                                                    @if($s->class_name)
-                                                        <span class="badge bg-light text-dark me-2">{{ $s->class_name }}</span>
-                                                    @endif
-                                                    <span>{{ $s->full_name }}</span>
+                                                    <?php if($s->class_name): ?>
+                                                        <span class="badge bg-light text-dark me-2"><?php echo e($s->class_name); ?></span>
+                                                    <?php endif; ?>
+                                                    <span><?php echo e($s->full_name); ?></span>
                                                 </div>
-                                                <button type="button" class="btn btn-sm btn-outline-success add-student-modal-btn" data-student-id="{{ $s->id }}">
+                                                <button type="button" class="btn btn-sm btn-outline-success add-student-modal-btn" data-student-id="<?php echo e($s->id); ?>">
                                                     <i class="bi bi-plus-circle"></i>
                                                 </button>
                                             </div>
-                                        @endif
-                                    @endforeach
+                                        <?php endif; ?>
+                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                 </div>
                             </div>
                         </div>
@@ -282,9 +283,9 @@
       </div>
     </div>
 </div>
-@endsection
+<?php $__env->stopSection(); ?>
 
-@push('scripts')
+<?php $__env->startPush('scripts'); ?>
 <script>
 // Toast notification helper
 function showToast(message, type = 'success') {
@@ -309,11 +310,11 @@ function showToast(message, type = 'success') {
 }
 
 document.addEventListener('DOMContentLoaded', function(){
-    const groupId = {{ $group->id }};
-    const schoolId = {{ $school->id }};
-    const timetableId = {{ $timetable->id }};
-    const currentGroupName = '{{ $group->name }}';
-    const csrfToken = '{{ csrf_token() }}';
+    const groupId = <?php echo e($group->id); ?>;
+    const schoolId = <?php echo e($school->id); ?>;
+    const timetableId = <?php echo e($timetable->id); ?>;
+    const currentGroupName = '<?php echo e($group->name); ?>';
+    const csrfToken = '<?php echo e(csrf_token()); ?>';
     
     if (location.hash === '#edit' || new URLSearchParams(location.search).get('edit') === '1') {
         const modalEl = document.getElementById('editGroupModal');
@@ -769,5 +770,7 @@ document.addEventListener('DOMContentLoaded', function(){
         box-shadow: inset 0 0 0 1px #0d6efd;
     }
 </style>
-@endpush
+<?php $__env->stopPush(); ?>
 
+
+<?php echo $__env->make('layouts.admin', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH C:\xampp\htdocs\mopa\resources\views/admin/timetables/group-show.blade.php ENDPATH**/ ?>
