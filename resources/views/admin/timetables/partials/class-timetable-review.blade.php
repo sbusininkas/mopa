@@ -455,15 +455,20 @@
 
     /* Group selector modal */
     .group-selector-modal {
-        position: absolute;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
         background: white;
         border: 1px solid #ddd;
-        border-radius: 6px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        padding: 12px;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+        padding: 16px;
         z-index: 1050;
-        min-width: 250px;
-        max-width: 400px;
+        min-width: 300px;
+        max-width: 500px;
+        max-height: 70vh;
+        overflow-y: auto;
     }
 
     .group-selector-modal-title {
@@ -629,23 +634,23 @@
     .lesson-cell-small {
         background-color: #e7f1ff;
         border-radius: 2px;
-        padding: 1px;
+        padding: 3px 2px;
         margin: 0.5px 0;
-        font-size: 0.55rem;
-        line-height: 1.1;
+        font-size: 0.75rem;
+        line-height: 1.25;
     }
 
     .lesson-cell-small strong {
         display: block;
         color: #0d6efd;
         font-weight: 600;
-        font-size: 0.55rem;
+        font-size: 0.75rem;
     }
 
     .lesson-cell-small small {
         display: block;
         color: #666;
-        font-size: 0.5rem;
+        font-size: 0.7rem;
         font-weight: 500;
     }
 
@@ -1564,18 +1569,18 @@
                                 `<small><a class="room-number-link" onclick="openRoomTimetable(${lessonData.room_id})" title="Peržiūrėti kabineto tvarkaraštį">${lessonData.room}</a></small>` : 
                                 (lessonData.room ? `<small>${lessonData.room}</small>` : '');
                             html += `<td class="timetable-cell lesson-cell-small comparison-cell" data-student-id="${result.id}" data-day="${day}" data-slot="${lessonNum}" data-group-id="${lessonData.group_id}" data-subject="${lessonData.subject}" data-teacher="${lessonData.teacher}" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-trigger="hover" title="Mokytojas: ${lessonData.teacher}" style="cursor: pointer; position: relative;">
-                                <div style=\"display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;\">
-                                    <div onclick=\"event.stopPropagation(); openGroupDetails(${lessonData.group_id})\" style=\"flex: 1;\">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;">
+                                    <div onclick="event.stopPropagation(); openGroupDetails(${lessonData.group_id})" style="flex: 1;">
                                         <strong>${groupName}</strong>
                                         ${roomLink}
                                     </div>
-                                    <button class=\"cell-check-btn\" title=\"Patikrinti šį langelį\" onclick=\"openCheckForCell('${day}', ${lessonNum}, ${result.id}, this); event.stopPropagation(); return false;\"><i class=\"bi bi-check2-circle\"></i></button>
+                                    <button class="cell-check-btn" title="Patikrinti šį langelį" onclick="openCheckForCell('${day}', ${lessonNum}, ${result.id}, this); event.stopPropagation(); return false;"><i class="bi bi-check2-circle"></i></button>
                                 </div>
                             </td>`;
                         } else {
-                            html += `<td class=\"timetable-cell lesson-cell-small comparison-cell\" data-student-id=\"${result.id}\" data-day=\"${day}\" data-slot=\"${lessonNum}\" style=\"position: relative;\">
-                                <div style=\"display:flex; justify-content:flex-end;\">
-                                    <button class=\"cell-check-btn\" title=\"Patikrinti šį langelį\" onclick=\"openCheckForCell('${day}', ${lessonNum}, ${result.id}, this); event.stopPropagation(); return false;\"><i class=\"bi bi-check2-circle\"></i></button>
+                            html += `<td class="timetable-cell lesson-cell-small comparison-cell" data-student-id="${result.id}" data-day="${day}" data-slot="${lessonNum}" style="position: relative;">
+                                <div style="display:flex; justify-content:flex-end;">
+                                    <button class="cell-check-btn" title="Patikrinti šį langelį" onclick="openCheckForCell('${day}', ${lessonNum}, ${result.id}, this); event.stopPropagation(); return false;"><i class="bi bi-check2-circle"></i></button>
                                 </div>
                             </td>`;
                         }
@@ -1799,12 +1804,18 @@
 
     // Triggered from per-cell check icon
     async function openCheckForCell(day, slot, studentId, el) {
+        console.log('openCheckForCell called:', {day, slot, studentId});
+        
         // mark this student's card as active
         document.querySelectorAll('.student-timetable-card-responsive').forEach(card => card.classList.remove('active'));
         const card = el.closest('.student-timetable-card-responsive');
-        if (card) card.classList.add('active');
+        if (card) {
+            card.classList.add('active');
+            console.log('Card marked active');
+        }
         
         const timetableId = {{ $timetable->id }};
+        console.log('Timetable ID:', timetableId);
         
         // Close any existing popups
         document.querySelectorAll('.cell-info-popup, .group-selector-modal').forEach(el => el.remove());
@@ -1821,6 +1832,7 @@
         `;
         
         document.body.appendChild(modal);
+        console.log('Modal created and appended');
         
         // Close on outside click
         setTimeout(() => {
@@ -1834,14 +1846,27 @@
         
         try {
             // Fetch groups scheduled at this time
-            const response = await fetch(`/admin/api/timetables/${timetableId}/groups/slot/${day}/${slot}`);
+            const apiUrl = `/admin/api/timetables/${timetableId}/groups/slot/${day}/${slot}`;
+            console.log('Fetching from:', apiUrl);
+            
+            const response = await fetch(apiUrl);
+            console.log('Response status:', response.status);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
+            console.log('Fetched data:', data);
+            
             const groups = data.data || [];
+            console.log('Groups count:', groups.length);
             
             const groupList = modal.querySelector('#groupList');
             
             if (groups.length === 0) {
                 groupList.innerHTML = '<div style="color: #666; font-size: 0.85rem; padding: 10px; text-align: center;">Šiuo metu nėra suplanuotų pamokų</div>';
+                console.log('No groups found');
                 return;
             }
             
@@ -1873,15 +1898,19 @@
             };
             
             renderGroups();
+            console.log('Groups rendered');
             
             // Search functionality
-            modal.querySelector('#groupSearch').addEventListener('input', function() {
-                renderGroups(this.value);
-            });
+            const searchInput = modal.querySelector('#groupSearch');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    renderGroups(this.value);
+                });
+            }
             
         } catch (err) {
             console.error('Error fetching groups:', err);
-            modal.querySelector('#groupList').innerHTML = '<div style="color: red; font-size: 0.85rem; padding: 10px;">Klaida įkeliant grupes</div>';
+            modal.querySelector('#groupList').innerHTML = '<div style="color: red; font-size: 0.85rem; padding: 10px;">Klaida įkeliant grupes: ' + err.message + '</div>';
         }
     }
     

@@ -455,15 +455,20 @@
 
     /* Group selector modal */
     .group-selector-modal {
-        position: absolute;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
         background: white;
         border: 1px solid #ddd;
-        border-radius: 6px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        padding: 12px;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+        padding: 16px;
         z-index: 1050;
-        min-width: 250px;
-        max-width: 400px;
+        min-width: 300px;
+        max-width: 500px;
+        max-height: 70vh;
+        overflow-y: auto;
     }
 
     .group-selector-modal-title {
@@ -629,23 +634,23 @@
     .lesson-cell-small {
         background-color: #e7f1ff;
         border-radius: 2px;
-        padding: 1px;
+        padding: 3px 2px;
         margin: 0.5px 0;
-        font-size: 0.55rem;
-        line-height: 1.1;
+        font-size: 0.75rem;
+        line-height: 1.25;
     }
 
     .lesson-cell-small strong {
         display: block;
         color: #0d6efd;
         font-weight: 600;
-        font-size: 0.55rem;
+        font-size: 0.75rem;
     }
 
     .lesson-cell-small small {
         display: block;
         color: #666;
-        font-size: 0.5rem;
+        font-size: 0.7rem;
         font-weight: 500;
     }
 
@@ -1564,18 +1569,18 @@
                                 `<small><a class="room-number-link" onclick="openRoomTimetable(${lessonData.room_id})" title="Peržiūrėti kabineto tvarkaraštį">${lessonData.room}</a></small>` : 
                                 (lessonData.room ? `<small>${lessonData.room}</small>` : '');
                             html += `<td class="timetable-cell lesson-cell-small comparison-cell" data-student-id="${result.id}" data-day="${day}" data-slot="${lessonNum}" data-group-id="${lessonData.group_id}" data-subject="${lessonData.subject}" data-teacher="${lessonData.teacher}" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-trigger="hover" title="Mokytojas: ${lessonData.teacher}" style="cursor: pointer; position: relative;">
-                                <div style=\"display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;\">
-                                    <div onclick=\"event.stopPropagation(); openGroupDetails(${lessonData.group_id})\" style=\"flex: 1;\">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;">
+                                    <div onclick="event.stopPropagation(); openGroupDetails(${lessonData.group_id})" style="flex: 1;">
                                         <strong>${groupName}</strong>
                                         ${roomLink}
                                     </div>
-                                    <button class=\"cell-check-btn\" title=\"Patikrinti šį langelį\" onclick=\"openCheckForCell('${day}', ${lessonNum}, ${result.id}, this); event.stopPropagation(); return false;\"><i class=\"bi bi-check2-circle\"></i></button>
+                                    <button class="cell-check-btn" title="Patikrinti šį langelį" onclick="openCheckForCell('${day}', ${lessonNum}, ${result.id}, this); event.stopPropagation(); return false;"><i class="bi bi-check2-circle"></i></button>
                                 </div>
                             </td>`;
                         } else {
-                            html += `<td class=\"timetable-cell lesson-cell-small comparison-cell\" data-student-id=\"${result.id}\" data-day=\"${day}\" data-slot=\"${lessonNum}\" style=\"position: relative;\">
-                                <div style=\"display:flex; justify-content:flex-end;\">
-                                    <button class=\"cell-check-btn\" title=\"Patikrinti šį langelį\" onclick=\"openCheckForCell('${day}', ${lessonNum}, ${result.id}, this); event.stopPropagation(); return false;\"><i class=\"bi bi-check2-circle\"></i></button>
+                            html += `<td class="timetable-cell lesson-cell-small comparison-cell" data-student-id="${result.id}" data-day="${day}" data-slot="${lessonNum}" style="position: relative;">
+                                <div style="display:flex; justify-content:flex-end;">
+                                    <button class="cell-check-btn" title="Patikrinti šį langelį" onclick="openCheckForCell('${day}', ${lessonNum}, ${result.id}, this); event.stopPropagation(); return false;"><i class="bi bi-check2-circle"></i></button>
                                 </div>
                             </td>`;
                         }
@@ -1798,18 +1803,19 @@
     }
 
     // Triggered from per-cell check icon
-    function openCheckForCell(day, slot, studentId, el) {
+    async function openCheckForCell(day, slot, studentId, el) {
+        console.log('openCheckForCell called:', {day, slot, studentId});
+        
         // mark this student's card as active
         document.querySelectorAll('.student-timetable-card-responsive').forEach(card => card.classList.remove('active'));
         const card = el.closest('.student-timetable-card-responsive');
-        if (card) card.classList.add('active');
-        showGroupSelector(day, slot);
-    }
-
-    // Show group selector modal
-    function showGroupSelector(day, slot) {
-        const schoolId = <?php echo e($school->id); ?>;
+        if (card) {
+            card.classList.add('active');
+            console.log('Card marked active');
+        }
+        
         const timetableId = <?php echo e($timetable->id); ?>;
+        console.log('Timetable ID:', timetableId);
         
         // Close any existing popups
         document.querySelectorAll('.cell-info-popup, .group-selector-modal').forEach(el => el.remove());
@@ -1819,55 +1825,108 @@
         modal.className = 'group-selector-modal';
         modal.innerHTML = `
             <div class="group-selector-modal-title">
-                Pasirinkite grupę (Pamoka ${slot}, ${day})
+                Pamokos vykstančios mokykloje (Pamoka ${slot}, ${getDayName(day)})
             </div>
             <input type="text" class="form-control form-control-sm" id="groupSearch" placeholder="Ieškoti..." style="margin-bottom: 10px; font-size: 0.85rem;">
-            <div class="group-selector-list" id="groupList"></div>
+            <div class="group-selector-list" id="groupList">Kraunama...</div>
         `;
         
         document.body.appendChild(modal);
+        console.log('Modal created and appended');
         
-        // Fetch groups that actually happen at this time across school
-        fetch(`/admin/api/timetables/${timetableId}/groups/slot/${day}/${slot}`)
-            .then(r => r.json())
-            .then(data => {
-                let groups = data.data || [];
-                // Fallback to all groups if API did not return slot-filtered list
-                if (!Array.isArray(groups) || groups.length === 0) {
-                    return fetch(`/admin/api/timetables/${timetableId}/groups`).then(r=>r.json()).then(all=>({fallback:true, data: all.data||[]}));
+        // Close on outside click
+        setTimeout(() => {
+            document.addEventListener('click', function closeModal(e) {
+                if (!e.target.closest('.group-selector-modal')) {
+                    modal.remove();
+                    document.removeEventListener('click', closeModal);
                 }
-                return {fallback:false, data: groups};
-            })
-            .then(payload => {
-                const groups = payload.data;
-                const groupList = modal.querySelector('#groupList');
+            });
+        }, 100);
+        
+        try {
+            // Fetch groups scheduled at this time
+            const apiUrl = `/admin/api/timetables/${timetableId}/groups/slot/${day}/${slot}`;
+            console.log('Fetching from:', apiUrl);
+            
+            const response = await fetch(apiUrl);
+            console.log('Response status:', response.status);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            console.log('Fetched data:', data);
+            
+            const groups = data.data || [];
+            console.log('Groups count:', groups.length);
+            
+            const groupList = modal.querySelector('#groupList');
+            
+            if (groups.length === 0) {
+                groupList.innerHTML = '<div style="color: #666; font-size: 0.85rem; padding: 10px; text-align: center;">Šiuo metu nėra suplanuotų pamokų</div>';
+                console.log('No groups found');
+                return;
+            }
+            
+            const renderGroups = (searchTerm = '') => {
+                const filtered = groups.filter(g => 
+                    g.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (g.subject && g.subject.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                    (g.teacher && g.teacher.toLowerCase().includes(searchTerm.toLowerCase()))
+                );
                 
-                const renderGroups = (searchTerm = '') => {
-                    groupList.innerHTML = groups
-                        .filter(g => g.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                        .map(group => `
-                            <div class="group-selector-item" onclick="addGroupToCell(${group.id}, '${group.name}', '${day}', ${slot})">
-                                <strong>${group.name}</strong>
-                                <small style="display: block; color: #666; margin-top: 2px;">${group.teacher || 'N/A'}</small>
-                            </div>
-                        `).join('');
-                };
+                if (filtered.length === 0) {
+                    groupList.innerHTML = '<div style="color: #666; font-size: 0.85rem; padding: 10px; text-align: center;">Nerasta</div>';
+                    return;
+                }
                 
-                renderGroups();
-                
-                // Search functionality
-                modal.querySelector('#groupSearch').addEventListener('input', function() {
+                groupList.innerHTML = filtered.map(group => {
+                    const groupNameEsc = escapeHtml(group.name);
+                    const subjectEsc = escapeHtml(group.subject || '');
+                    const teacherEsc = escapeHtml(group.teacher || '');
+                    return `
+                        <div class="group-selector-item" onclick="addGroupToCell(${group.id}, '${groupNameEsc}', '${subjectEsc}', '${teacherEsc}', '${day}', ${slot}, ${studentId})">
+                            <strong>${groupNameEsc}</strong>
+                            <small style="display: block; color: #666; margin-top: 2px;">
+                                ${subjectEsc || 'N/A'} • ${teacherEsc || 'N/A'}
+                            </small>
+                        </div>
+                    `;
+                }).join('');
+            };
+            
+            renderGroups();
+            console.log('Groups rendered');
+            
+            // Search functionality
+            const searchInput = modal.querySelector('#groupSearch');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
                     renderGroups(this.value);
                 });
-            })
-            .catch(err => {
-                console.error('Error fetching groups:', err);
-                modal.querySelector('#groupList').innerHTML = '<div style="color: red; font-size: 0.85rem;">Klaida įkeliant grupes</div>';
-            });
+            }
+            
+        } catch (err) {
+            console.error('Error fetching groups:', err);
+            modal.querySelector('#groupList').innerHTML = '<div style="color: red; font-size: 0.85rem; padding: 10px;">Klaida įkeliant grupes: ' + err.message + '</div>';
+        }
+    }
+    
+    function getDayName(abbr) {
+        const names = {Mon: 'Pirmadienis', Tue: 'Antradienis', Wed: 'Trečiadienis', Thu: 'Ketvirtadienis', Fri: 'Penktadienis'};
+        return names[abbr] || abbr;
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
-    // Add group to cell (preview)
-    function addGroupToCell(groupId, groupName, day, slot) {
+    // Add group to cell (preview with yellow highlighting)
+    function addGroupToCell(groupId, groupName, subject, teacher, day, slot, studentId) {
         // Close modals
         document.querySelectorAll('.cell-info-popup, .group-selector-modal').forEach(el => el.remove());
         
@@ -1878,7 +1937,6 @@
             return;
         }
         
-        const studentId = parseInt(currentStudentCard.dataset.studentId);
         const cell = currentStudentCard.querySelector(`.comparison-cell[data-day="${day}"][data-slot="${slot}"]`);
         
         if (!cell) {
@@ -1886,26 +1944,24 @@
             return;
         }
         
-        // Add preview content
-        const previewContent = document.createElement('div');
-        previewContent.className = 'preview-change-badge';
-        previewContent.innerHTML = '+';
-        previewContent.title = `Pridėta: ${groupName}`;
-        
-        // Add content to cell
+        // Add content to cell with yellow background
         const cellContent = cell.querySelector('div');
         if (cellContent) {
             const previewDiv = document.createElement('div');
+            previewDiv.className = 'preview-lesson-insert';
             previewDiv.style.marginTop = '4px';
-            previewDiv.style.padding = '4px';
-            previewDiv.style.backgroundColor = '#fff3cd';
-            previewDiv.style.borderRadius = '3px';
-            previewDiv.style.fontSize = '0.75rem';
-            previewDiv.style.borderLeft = '3px solid #ff9800';
+            previewDiv.style.padding = '6px';
+            previewDiv.style.backgroundColor = '#fff9e6';
+            previewDiv.style.border = '2px solid #ffc107';
+            previewDiv.style.borderRadius = '4px';
+            previewDiv.style.fontSize = '0.7rem';
             previewDiv.innerHTML = `
-                <strong>${groupName}</strong>
-                <button class="btn btn-xs p-0" onclick="removeGroupPreview(this)" title="Pašalinti peržiūrą" style="background: none; border: none; color: #ff9800; float: right; cursor: pointer;">×</button>
-                <div style="clear: both;"></div>
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2px;">
+                    <strong style="color: #856404; font-size: 0.75rem;">${groupName}</strong>
+                    <button class="btn btn-xs p-0" onclick="removeGroupPreview(this)" title="Pašalinti peržiūrą" style="background: none; border: none; color: #856404; cursor: pointer; line-height: 1; font-size: 1.2rem;">×</button>
+                </div>
+                <small style="display: block; color: #856404; line-height: 1.3;">${subject || ''}</small>
+                <small style="display: block; color: #856404; opacity: 0.8; line-height: 1.3;">${teacher || ''}</small>
             `;
             cellContent.appendChild(previewDiv);
         }
@@ -1915,14 +1971,14 @@
 
     // Remove group preview
     function removeGroupPreview(btn) {
-        const previewDiv = btn.closest('[style*="fff3cd"]');
+        const previewDiv = btn.closest('.preview-lesson-insert');
         if (previewDiv) {
             previewDiv.remove();
             
             // Check if there are still preview items
-            const cell = previewDiv.closest('.comparison-cell');
-            const hasPreview = cell.querySelector('[style*="fff3cd"]');
-            if (!hasPreview) {
+            const cell = btn.closest('.comparison-cell');
+            const hasPreview = cell && cell.querySelector('.preview-lesson-insert');
+            if (cell && !hasPreview) {
                 cell.classList.remove('preview-change');
             }
         }
