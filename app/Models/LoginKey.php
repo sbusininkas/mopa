@@ -100,4 +100,12 @@ class LoginKey extends Model
     {
         return trim($this->first_name . ' ' . $this->last_name);
     }
+
+    /**
+     * Get class name for students.
+     */
+    public function getClassNameAttribute(): ?string
+    {
+        return $this->class?->name ?? null;
+    }
 }

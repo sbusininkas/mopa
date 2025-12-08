@@ -5,6 +5,23 @@
 .hover-bg-light:hover {
     background-color: #f8f9fa !important;
 }
+
+.group-name-link,
+.unscheduled-group-link,
+.unscheduled-subject-link {
+    color: #0d6efd;
+    text-decoration: none;
+    border-bottom: 1px dashed #0d6efd;
+    transition: all 0.2s ease;
+}
+
+.group-name-link:hover,
+.unscheduled-group-link:hover,
+.unscheduled-subject-link:hover {
+    color: #0b5ed7;
+    border-bottom: 1px solid #0b5ed7;
+    text-decoration: none;
+}
 </style>
 <div class="container">
     @if(session('success'))

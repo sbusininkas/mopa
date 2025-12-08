@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="<?php echo e(str_replace('_', '-', app()->getLocale())); ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', config('app.name', 'Laravel'))</title>
+    <meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
+    <title><?php echo $__env->yieldContent('title', config('app.name', 'Laravel')); ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="{{ asset('css/custom-tables.css') }}">
+    <link rel="stylesheet" href="<?php echo e(asset('css/custom-tables.css')); ?>">
     <!-- SimpleBar for reliable in-card scrolling -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simplebar@6.2.5/dist/simplebar.min.css" />
     <style>
@@ -473,7 +473,7 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark navbar-modern">
         <div class="container-fluid px-4">
-            <a class="navbar-brand d-flex align-items-center" href="{{ route('dashboard') }}">
+            <a class="navbar-brand d-flex align-items-center" href="<?php echo e(route('dashboard')); ?>">
                 <i class="bi bi-speedometer2 me-2"></i>
                 <span>MOPA</span>
             </a>
@@ -482,9 +482,9 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-center">
-                    @auth
+                    <?php if(auth()->guard()->check()): ?>
                         <li class="nav-item me-2">
-                            @include('partials.active_school')
+                            <?php echo $__env->make('partials.active_school', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
                         </li>
                         <li class="nav-item dropdown me-2">
                             <a class="nav-link position-relative d-flex align-items-center" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown">
@@ -496,8 +496,8 @@
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationsDropdown" style="width: 350px; max-height: 400px; overflow-y: auto;">
                                 <li class="dropdown-header d-flex justify-content-between align-items-center">
                                     <span><strong>Pranešimai</strong></span>
-                                    <form method="POST" action="{{ route('notifications.read-all') }}" class="d-inline">
-                                        @csrf
+                                    <form method="POST" action="<?php echo e(route('notifications.read-all')); ?>" class="d-inline">
+                                        <?php echo csrf_field(); ?>
                                         <button type="submit" class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size: 0.75rem;">
                                             Pažymėti visus
                                         </button>
@@ -511,7 +511,7 @@
                                 </div>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
-                                    <a class="dropdown-item text-center small" href="{{ route('notifications.index') }}">
+                                    <a class="dropdown-item text-center small" href="<?php echo e(route('notifications.index')); ?>">
                                         Peržiūrėti visus pranešimus
                                     </a>
                                 </li>
@@ -520,20 +520,20 @@
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
                                 <i class="bi bi-person-circle fs-5 me-2"></i>
-                                <span>{{ Auth::user()->name }}</span>
+                                <span><?php echo e(Auth::user()->name); ?></span>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown" style="min-width: 220px;">
                                 <li class="px-3 py-2 border-bottom">
                                     <small class="text-muted d-block">Prisijungęs kaip</small>
-                                    <strong>{{ Auth::user()->name }}</strong>
+                                    <strong><?php echo e(Auth::user()->name); ?></strong>
                                 </li>
                                 <li><a class="dropdown-item" href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-                                <li><a class="dropdown-item" href="{{ route('profile.my-schools') }}"><i class="bi bi-building"></i> Mano mokyklos</a></li>
-                                <li><a class="dropdown-item" href="{{ route('profile.activate-key') }}"><i class="bi bi-key"></i> Suaktyvinti raktą</a></li>
+                                <li><a class="dropdown-item" href="<?php echo e(route('profile.my-schools')); ?>"><i class="bi bi-building"></i> Mano mokyklos</a></li>
+                                <li><a class="dropdown-item" href="<?php echo e(route('profile.activate-key')); ?>"><i class="bi bi-key"></i> Suaktyvinti raktą</a></li>
                                 <li><hr class="dropdown-divider my-2"></li>
                                 <li>
-                                    <form method="POST" action="{{ route('logout') }}" style="display: inline;">
-                                        @csrf
+                                    <form method="POST" action="<?php echo e(route('logout')); ?>" style="display: inline;">
+                                        <?php echo csrf_field(); ?>
                                         <button type="submit" class="dropdown-item" style="border: none; background: none; cursor: pointer;">
                                             <i class="bi bi-box-arrow-right"></i> Atsijungti
                                         </button>
@@ -541,15 +541,15 @@
                                 </li>
                             </ul>
                         </li>
-                    @endauth
+                    <?php endif; ?>
                 </ul>
             </div>
         </div>
     </nav>
 
     <div class="container-fluid">
-        @auth
-            @php
+        <?php if(auth()->guard()->check()): ?>
+            <?php
                 // Get current school from multiple sources
                 $currentSchool = $school ?? $activeSchool ?? null;
                 
@@ -557,13 +557,13 @@
                 if (!$currentSchool && session('active_school_id')) {
                     $currentSchool = \App\Models\School::find(session('active_school_id'));
                 }
-            @endphp
-            @if($currentSchool)
+            ?>
+            <?php if($currentSchool): ?>
             <div class="admin-container">
                 <!-- Sidebar with Toggle Button -->
                 <div style="position: relative; display: inline-block;">
                     <div class="admin-sidebar" id="adminSidebar">
-                        @include('partials.sidebar')
+                        <?php echo $__env->make('partials.sidebar', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
                     </div>
                     <button class="sidebar-toggle-btn" id="sidebarToggle" title="Sutraukti/Išskleisti meniu">
                         <i class="bi bi-chevron-left" id="toggleIcon"></i>
@@ -572,25 +572,25 @@
 
                 <!-- Content -->
                 <div class="admin-content">
-                    @yield('content')
+                    <?php echo $__env->yieldContent('content'); ?>
                 </div>
             </div>
-            @else
+            <?php else: ?>
                 <div class="mt-4">
-                    @yield('content')
+                    <?php echo $__env->yieldContent('content'); ?>
                 </div>
-            @endif
-        @else
+            <?php endif; ?>
+        <?php else: ?>
             <div class="mt-4">
-                @yield('content')
+                <?php echo $__env->yieldContent('content'); ?>
             </div>
-        @endauth
+        <?php endif; ?>
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/simplebar@6.2.5/dist/simplebar.min.js"></script>
     
-    @auth
+    <?php if(auth()->guard()->check()): ?>
     <script>
         // Remove any leftover modal backdrops on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -736,7 +736,7 @@
         
         // Fetch unread notifications
         function fetchUnreadNotifications() {
-            fetch('{{ route('notifications.unread') }}')
+            fetch('<?php echo e(route('notifications.unread')); ?>')
                 .then(response => response.json())
                 .then(data => {
                     const badge = document.getElementById('notificationBadge');
@@ -751,7 +751,7 @@
                             const message = notification.data.message || 'Naujas pranešimas';
                             html += `
                                 <li>
-                                    <a class="dropdown-item" href="{{ route('notifications.index') }}" style="white-space: normal;">
+                                    <a class="dropdown-item" href="<?php echo e(route('notifications.index')); ?>" style="white-space: normal;">
                                         <div class="d-flex justify-content-between align-items-start">
                                             <div class="flex-grow-1 me-2" style="overflow-wrap: break-word; word-wrap: break-word; word-break: break-word;">
                                                 <div class="fw-bold small">${notification.type}</div>
@@ -784,9 +784,9 @@
         // Poll every 30 seconds
         setInterval(fetchUnreadNotifications, 30000);
     </script>
-    @endauth
+    <?php endif; ?>
     
-    @stack('scripts')
+    <?php echo $__env->yieldPushContent('scripts'); ?>
     
     <!-- Footer -->
     <footer class="admin-footer">
@@ -797,3 +797,4 @@
     </footer>
 </body>
 </html>
+<?php /**PATH C:\Users\herom\Desktop\Projektai\mopa\resources\views/layouts/admin.blade.php ENDPATH**/ ?>

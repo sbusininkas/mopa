@@ -82,8 +82,20 @@
                             }
                         ?>
                         <tr class="unscheduled-item" data-group-id="{{ $item['group_id'] }}">
-                            <td>{{ $item['group_name'] }}</td>
-                            <td>{{ $item['subject_name'] }}</td>
+                            <td>
+                                <a href="{{ route('schools.timetables.groups.details', [$school, $timetable, $item['group_id']]) }}" 
+                                   class="text-decoration-none unscheduled-group-link"
+                                   title="Atidaryti grupę">
+                                    {{ $item['group_name'] }}
+                                </a>
+                            </td>
+                            <td>
+                                <a href="{{ route('schools.timetables.subject-groups', [$school, $timetable, $item['subject_name']]) }}" 
+                                   class="text-decoration-none unscheduled-subject-link"
+                                   title="Peržiūrėti visas šio dalyko grupes">
+                                    {{ $item['subject_name'] }}
+                                </a>
+                            </td>
                             <td>
                                 @if(!empty($item['teacher_name']) && !empty($item['teacher_login_key_id']))
                                     <a href="{{ route('schools.timetables.teacher', [$school, $timetable, $item['teacher_login_key_id']]) }}" 

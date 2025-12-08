@@ -14,127 +14,254 @@
         </div>
     </div>
 
-    <div class="row g-3">
-        <div class="col-md-9">
-            <div class="card">
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-bordered align-middle mb-0" id="teacherGrid" data-teacher-id="{{ $teacher->id }}">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th style="width:60px" class="text-center">#</th>
-                                    @foreach($days as $code => $label)
-                                        <th class="text-center">{{ $label }}</th>
-                                    @endforeach
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @for($row=1; $row <= $maxRows; $row++)
-                                    <tr>
-                                        <td class="text-center fw-bold sticky-col-row">{{ $row }}</td>
-                                        @foreach($days as $code => $label)
-                                            @php 
-                                                $cell = $grid[$row][$code] ?? null;
-                                                if ($cell) {
-                                                    $subject = $cell['subject'] ?? '—';
-                                                    $roomNumber = $cell['room_number'] ?? null;
-                                                    $roomDisplay = $roomNumber ?: '—';
-                                                    $dayLabel = $label;
-                                                    $lessonNr = $row;
-                                                    $teacherName = $teacher->full_name ?? '—';
-                                                    // Tooltip su visa informacija
-                                                    $tooltipHtml = '<div class="tt-inner">'
-                                                        .'<div class="tt-row tt-row-head"><i class="bi bi-clock-history tt-ico"></i><span class="tt-val">'.e($dayLabel).' • '.e($lessonNr).' pamoka</span></div>'
-                                                        .'<div class="tt-divider"></div>'
-                                                        .'<div class="tt-row"><i class="bi bi-collection-fill tt-ico"></i><span class="tt-val">'.e($cell['group']).'</span></div>'
-                                                        .'<div class="tt-row"><i class="bi bi-book-half tt-ico"></i><span class="tt-val">'.e($subject).'</span></div>'
-                                                        .'<div class="tt-row"><i class="bi bi-door-closed tt-ico"></i><span class="tt-val">'.e($roomDisplay).'</span></div>'
-                                                        .'<div class="tt-row"><i class="bi bi-person-badge tt-ico"></i><span class="tt-val">'.e($teacherName).'</span></div>'
-                                                    .'</div>';
-                                                    $tooltipB64 = base64_encode($tooltipHtml);
-                                                }
-                                            @endphp
-                                            <td class="text-center lesson-col drop-target timetable-cell" style="min-width:220px" data-day="{{ $code }}" data-slot="{{ $row }}" data-teacher-id="{{ $teacher->id }}">
-                                                @if($cell)
-                                                    <span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" draggable="true"
-                                                        data-tooltip-b64="{{ $tooltipB64 }}"
-                                                        data-kind="scheduled"
-                                                        data-slot-id="{{ $cell['slot_id'] }}"
-                                                        data-group-id="{{ $cell['group_id'] }}"
-                                                        data-teacher-id="{{ $teacher->id }}"
-                                                        data-group-name="{{ $cell['group'] }}"
-                                                        data-subject-name="{{ $cell['subject'] ?? '' }}"
-                                                    >{{ $cell['group'] }}</span>
-                                                @else
-                                                    <span class="text-muted">—</span>
-                                                @endif
-                                            </td>
-                                        @endforeach
-                                    </tr>
-                                @endfor
-                            </tbody>
-                        </table>
+    <!-- Nesuplanuotų pamokų panelė VIRŠ lentelės -->
+    <div class="card mb-3" id="unscheduledPanel">
+        <div class="card-header p-2"><strong>Nesuplanuotos grupės (šiam mokytojui)</strong></div>
+        <div class="card-body p-2" style="max-height: 150px; overflow:auto;">
+            @forelse(($unscheduled ?? []) as $u)
+                <div class="unscheduled-item mb-1 d-flex align-items-center" draggable="true"
+                     data-kind="unscheduled"
+                     data-group-id="{{ $u['group_id'] }}"
+                     data-group-name="{{ $u['group_name'] ?? $u['group'] ?? '' }}"
+                     data-subject-name="{{ $u['subject_name'] ?? $u['subject'] ?? '' }}"
+                     data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
+                     data-teacher-name="{{ $u['teacher_name'] ?? $u['teacher'] ?? '' }}"
+                     data-remaining="{{ $u['remaining_lessons'] }}">
+                    <div class="flex-grow-1">
+                        <div class="unscheduled-title">
+                            {{ $u['group_name'] ?? $u['group'] ?? 'Grupė' }}
+                            <span class="badge bg-primary ms-2 remaining-badge">{{ $u['remaining_lessons'] }}</span>
+                        </div>
+                        <div class="unscheduled-meta">
+                            <span class="unscheduled-subject">{{ $u['subject_name'] ?? $u['subject'] ?? '' }}</span>
+                        </div>
+                    </div>
+                    <div class="ms-2">
+                        <button type="button" class="btn btn-outline-info btn-sm" 
+                                onclick="findAvailableSlots({{ $u['group_id'] }}, '{{ addslashes($u['group_name'] ?? $u['group'] ?? '') }}', '{{ addslashes($u['subject_name'] ?? $u['subject'] ?? '') }}', {{ $u['teacher_login_key_id'] ?? 'null' }})"
+                                title="Rasti laisvus langelius">
+                            <i class="bi bi-search"></i>
+                        </button>
                     </div>
                 </div>
-            </div>
+            @empty
+                <span class="text-muted small">Nėra neužpildytų pamokų šiam mokytojui</span>
+            @endforelse
         </div>
-        <div class="col-md-3">
-            <div class="card h-100" id="unscheduledPanel">
-                <div class="card-header p-2"><strong>Nesuplanuotos (šiam mokytojui)</strong></div>
-                <div class="card-body p-2" style="max-height:60vh; overflow:auto;">
-                    @forelse(($unscheduled ?? []) as $u)
-                        <div class="unscheduled-item mb-1 d-flex align-items-center" draggable="true"
-                             data-kind="unscheduled"
-                             data-group-id="{{ $u['group_id'] }}"
-                             data-group-name="{{ $u['group_name'] ?? $u['group'] ?? '' }}"
-                             data-subject-name="{{ $u['subject_name'] ?? $u['subject'] ?? '' }}"
-                             data-teacher-id="{{ $u['teacher_login_key_id'] ?? '' }}"
-                             data-teacher-name="{{ $u['teacher_name'] ?? $u['teacher'] ?? '' }}"
-                             data-remaining="{{ $u['remaining_lessons'] }}">
-                            <div class="flex-grow-1">
-                                <div class="unscheduled-title">
-                                    {{ $u['group_name'] ?? $u['group'] ?? 'Grupė' }}
-                                    <span class="remaining-count">({{ $u['remaining_lessons'] }})</span>
-                                </div>
-                                <div class="unscheduled-meta">
-                                    <span class="unscheduled-subject">{{ $u['subject_name'] ?? $u['subject'] ?? '' }}</span>
-                                    @if(!empty($u['teacher_name'] ?? $u['teacher'] ?? ''))
-                                        <span class="unscheduled-teacher">{{ $u['teacher_name'] ?? $u['teacher'] }}</span>
-                                    @endif
-                                    <span class="unscheduled-room"><i class="bi bi-door-closed"></i> {{ $u['room_number'] ?? '—' }}</span>
-                                </div>
-                            </div>
-                            <div class="ms-2">
-                                <button type="button" class="btn btn-outline-info btn-sm" 
-                                        onclick="findAvailableSlots({{ $u['group_id'] }}, '{{ addslashes($u['group_name'] ?? $u['group'] ?? '') }}', '{{ addslashes($u['subject_name'] ?? $u['subject'] ?? '') }}', {{ $u['teacher_login_key_id'] ?? 'null' }})"
-                                        title="Rasti laisvus langelius">
-                                    <i class="bi bi-search"></i>
-                                </button>
-                            </div>
-                        </div>
-                    @empty
-                        <span class="text-muted small">Nėra neužpildytų pamokų šiam mokytojui</span>
-                    @endforelse
-                </div>
-                <div class="card-footer d-flex justify-content-between align-items-center p-1 small text-muted">
-                    <span>Tempkite ant pasirinktų langelių</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAvailabilityMarks()" title="Išvalyti žymėjimus">Išvalyti</button>
-                </div>
+        <div class="card-footer d-flex justify-content-between align-items-center p-1 small text-muted">
+            <span>Tempkite ant pasirinktų langelių</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearAvailabilityMarks()" title="Išvalyti žymėjimus">Išvalyti</button>
+        </div>
+    </div>
+
+    <!-- Tvarkaraščio lentelė - pilna plotis -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle mb-0" id="teacherGrid" data-teacher-id="{{ $teacher->id }}">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:60px" class="text-center">#</th>
+                            @foreach($days as $code => $label)
+                                <th class="text-center">{{ $label }}</th>
+                            @endforeach
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for($row=1; $row <= $maxRows; $row++)
+                            <tr>
+                                <td class="text-center fw-bold sticky-col-row">{{ $row }}</td>
+                                @foreach($days as $code => $label)
+                                    @php 
+                                        $cell = $grid[$row][$code] ?? null;
+                                        if ($cell) {
+                                            $subject = $cell['subject'] ?? '—';
+                                            $roomNumber = $cell['room_number'] ?? null;
+                                            $roomName = $cell['room_name'] ?? null;
+                                            $roomDisplay = $roomNumber ? ($roomNumber . ($roomName ? ' ' . $roomName : '')) : '—';
+                                            $dayLabel = $label;
+                                            $lessonNr = $row;
+                                            $teacherName = $teacher->full_name ?? '—';
+                                            // Tooltip su visa informacija
+                                            $tooltipHtml = '<div class="tt-inner">'
+                                                .'<div class="tt-row tt-row-head"><i class="bi bi-clock-history tt-ico"></i><span class="tt-val">'.e($dayLabel).' • '.e($lessonNr).' pamoka</span></div>'
+                                                .'<div class="tt-divider"></div>'
+                                                .'<div class="tt-row"><i class="bi bi-collection-fill tt-ico"></i><span class="tt-val">'.e($cell['group']).'</span></div>'
+                                                .'<div class="tt-row"><i class="bi bi-book-half tt-ico"></i><span class="tt-val">'.e($subject).'</span></div>'
+                                                .'<div class="tt-row"><i class="bi bi-door-closed tt-ico"></i><span class="tt-val">'.e($roomDisplay).'</span></div>'
+                                                .'<div class="tt-row"><i class="bi bi-person-badge tt-ico"></i><span class="tt-val">'.e($teacherName).'</span></div>'
+                                            .'</div>';
+                                            $tooltipB64 = base64_encode($tooltipHtml);
+                                        }
+                                    @endphp
+                                    <td class="text-center lesson-col drop-target timetable-cell" style="min-width:220px" data-day="{{ $code }}" data-slot="{{ $row }}" data-teacher-id="{{ $teacher->id }}">
+                                        @if($cell)
+                                            <span class="badge bg-secondary tt-trigger" style="font-size:0.75rem; cursor:move;" draggable="true"
+                                                data-tooltip-b64="{{ $tooltipB64 }}"
+                                                data-kind="scheduled"
+                                                data-slot-id="{{ $cell['slot_id'] }}"
+                                                data-group-id="{{ $cell['group_id'] }}"
+                                                data-teacher-id="{{ $teacher->id }}"
+                                                data-group-name="{{ $cell['group'] }}"
+                                                data-subject-name="{{ $cell['subject'] ?? '' }}"
+                                                data-student-count="{{ $cell['student_count'] ?? 0 }}"
+                                                data-room-number="{{ $cell['room_number'] ?? '' }}"
+                                                data-teacher-name="{{ $cell['teacher_name'] ?? '' }}"
+                                            >{{ $cell['group'] }}{{ $roomNumber ? ' (' . $roomNumber . ')' : '' }}<br/><small>{{ $subject }}</small></span>
+                                        @else
+                                            <span class="text-muted">—</span>
+                                        @endif
+                                    </td>
+                                @endforeach
+                            </tr>
+                        @endfor
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
+
+    <!-- Groups list section (like subject groups view) -->
+    @if(count($groups ?? []) > 0)
+        <div class="card mt-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-collection"></i> {{ $teacher->full_name }} — Visos grupės</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Grupė</th>
+                                <th class="text-center" style="width: 120px;">Dalykas</th>
+                                <th class="text-center" style="width: 100px;">Kabinetas</th>
+                                <th class="text-center" style="width: 80px;">Mokiniai</th>
+                                <th class="text-center" style="width: 100px;">Suplanuota</th>
+                                <th class="text-center" style="width: 100px;">Nesuplanuota</th>
+                                <th class="text-center" style="width: 60px;">Veiksmai</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($groups as $group)
+                                <tr>
+                                    <td>
+                                        <a href="{{ route('schools.timetables.groups.details', [$school, $timetable, $group['id']]) }}" class="text-decoration-none">
+                                            <strong>{{ $group['name'] }}</strong>
+                                        </a>
+                                    </td>
+                                    <td class="text-center">
+                                        @if($group['subject_id'] && $group['subject_name'])
+                                            <a href="{{ route('schools.timetables.subject-groups', [$school, $timetable, $group['subject_name']]) }}" 
+                                               class="text-decoration-none link-primary"
+                                               title="Atidaryti dalyko grupes">
+                                                <small>{{ $group['subject_name'] }}</small>
+                                            </a>
+                                        @else
+                                            <small>{{ $group['subject_name'] ?? '—' }}</small>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        @if($group['room_number'])
+                                            <span class="badge bg-dark">{{ $group['room_number'] }}
+                                                @if($group['room_name'])
+                                                    {{ $group['room_name'] }}
+                                                @endif
+                                            </span>
+                                        @else
+                                            <span class="text-muted">—</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info text-dark">{{ $group['students_count'] }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success">{{ $group['scheduled_count'] }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        @if($group['unscheduled_count'] > 0)
+                                            <span class="badge bg-warning text-dark">{{ $group['unscheduled_count'] }}</span>
+                                        @else
+                                            <span class="badge bg-secondary">0</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="{{ route('schools.timetables.groups.details', [$school, $timetable, $group['id']]) }}" 
+                                           class="btn btn-sm btn-outline-primary" 
+                                           title="Atidaryti grupę">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer bg-light">
+                <ul class="mb-0 small text-muted">
+                    <li><strong>Iš viso grupių:</strong> {{ count($groups) }}</li>
+                    <li><strong>Iš viso mokinių:</strong> {{ collect($groups)->sum('students_count') }}</li>
+                    <li><strong>Iš viso suplanuotų pamokų:</strong> {{ collect($groups)->sum('scheduled_count') }}</li>
+                    <li><strong>Iš viso nesuplanuotų pamokų:</strong> {{ collect($groups)->sum('unscheduled_count') }}</li>
+                </ul>
+            </div>
+        </div>
+    @endif
 </div>
+
 @endsection
+
+<!-- Group Info Notification Panel -->
+<div id="groupInfoNotification" class="group-info-notification" style="display: none;">
+    <div class="group-info-close" onclick="document.getElementById('groupInfoNotification').style.display='none';">✕</div>
+    <div class="group-info-content">
+        <h6 id="groupInfoName"></h6>
+        <div class="group-info-stat">
+            <span class="label">Dalykas:</span>
+            <span id="groupInfoSubject" class="value">—</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Mokytojas:</span>
+            <span id="groupInfoTeacher" class="value">—</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Kabinetai:</span>
+            <span id="groupInfoRooms" class="value">—</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Mokiniai:</span>
+            <span id="groupInfoStudents" class="value">0</span>
+        </div>
+        <div class="group-info-stat" style="border-top: 1px solid #dee2e6; padding-top: 8px; margin-top: 8px;">
+            <span class="label">Suplanuota:</span>
+            <span id="groupInfoScheduled" class="value">0</span>
+        </div>
+        <div class="group-info-stat">
+            <span class="label">Nesuplanuota:</span>
+            <span id="groupInfoUnscheduled" class="value">0</span>
+        </div>
+        <div class="group-info-stat" style="border-top: 1px solid #dee2e6; padding-top: 8px; margin-top: 8px;">
+            <span class="label">Iš viso:</span>
+            <span id="groupInfoTotal" class="value" style="font-weight: bold; color: #0d6efd;">0</span>
+        </div>
+        <div class="d-flex gap-2 mt-2">
+            <a id="groupInfoViewLink" href="#" target="_blank" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-box-arrow-up-right"></i> Peržiūra
+            </a>
+            <a id="groupInfoEditLink" href="#" target="_blank" class="btn btn-sm btn-primary">
+                <i class="bi bi-pencil-square"></i> Redaguoti
+            </a>
+        </div>
+    </div>
+</div>
 
 @push('scripts')
 <script>
-// Global variables for drag & drop
-let dragged = null;
-let draggedKind = null;
-
 document.addEventListener('DOMContentLoaded', function(){
     const grid = document.getElementById('teacherGrid');
     if (!grid) return;
+    let dragged = null;
+    let draggedKind = null;
 
     function initBadgeDrag(el){
         if (!el) return;
@@ -169,18 +296,27 @@ document.addEventListener('DOMContentLoaded', function(){
             showContextMenu(e, slotId, groupId, groupName, subjectName, el);
         });
         
-        // Also add click to select
+        // Click to highlight all cells of same group and show info
         el.addEventListener('click', e => {
-            if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                // Toggle selection
-                if (el.classList.contains('lesson-selected')) {
-                    el.classList.remove('lesson-selected');
-                } else {
-                    document.querySelectorAll('.lesson-selected').forEach(sel => sel.classList.remove('lesson-selected'));
-                    el.classList.add('lesson-selected');
-                }
-            }
+            const groupName = el.dataset.groupName;
+            const groupId = el.dataset.groupId;
+            if (!groupName) return;
+            
+            // Remove previous highlights
+            document.querySelectorAll('.group-highlighted').forEach(el => el.classList.remove('group-highlighted'));
+            document.querySelectorAll('.group-cell-highlighted').forEach(cell => cell.classList.remove('group-cell-highlighted'));
+            
+            // Highlight all cells with this group
+            let scheduledCount = 0;
+            document.querySelectorAll(`.tt-trigger[data-group-name="${groupName}"]`).forEach(badge => {
+                badge.classList.add('group-highlighted');
+                scheduledCount++;
+                const cell = badge.closest('.timetable-cell');
+                if (cell) cell.classList.add('group-cell-highlighted');
+            });
+            
+            // Show group info notification
+            showGroupInfo(groupName, groupId, scheduledCount);
         });
     }
     grid.querySelectorAll('.tt-trigger[draggable="true"]').forEach(initBadgeDrag);
@@ -188,14 +324,6 @@ document.addEventListener('DOMContentLoaded', function(){
     // Make unscheduled items draggable
     document.querySelectorAll('.unscheduled-item').forEach(el => {
         el.addEventListener('dragstart', e => {
-            // Clear all previous conflict colors
-            document.querySelectorAll('.drop-target').forEach(c => {
-                c.classList.remove('bg-success-subtle', 'bg-warning-subtle', 'bg-danger-subtle', 'drop-hover');
-                delete c.dataset.conflictChecked;
-                delete c.dataset.lastCheckedGroup;
-                delete c.dataset.conflictStatus;
-            });
-            
             dragged = el;
             draggedKind = 'unscheduled';
             e.dataTransfer.effectAllowed = 'move';
@@ -210,40 +338,21 @@ document.addEventListener('DOMContentLoaded', function(){
     });
 
     grid.querySelectorAll('.drop-target').forEach(cell => {
-        let hoverTimeout;
-        cell.addEventListener('dragover', async e => {
+        cell.addEventListener('dragover', e => {
             if (!dragged) return;
             const rowTeacherId = String(cell.dataset.teacherId || '');
             const itemTeacherId = String(dragged.dataset.teacherId || '');
             const canDrop = !!itemTeacherId && itemTeacherId === rowTeacherId;
-            
             if (!canDrop) {
                 e.dataTransfer.dropEffect = 'none';
-                cell.classList.remove('drop-hover', 'bg-success-subtle', 'bg-warning-subtle', 'bg-danger-subtle');
+                cell.classList.remove('drop-hover');
                 return;
             }
-            
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
-            
-            // Always show blue highlight for unscheduled items on empty cells
-            const hasContent = cell.querySelector('[draggable="true"]');
-            if (draggedKind === 'unscheduled' && !hasContent) {
-                cell.classList.add('drop-hover');
-            } else if (hasContent) {
-                // Cell has content - don't color it
-                cell.classList.remove('drop-hover');
-            } else {
-                // Scheduled item - show normal drop hover
-                cell.classList.add('drop-hover');
-            }
+            cell.classList.add('drop-hover');
         });
-        
-        cell.addEventListener('dragleave', () => {
-            if (hoverTimeout) clearTimeout(hoverTimeout);
-            // Don't remove color classes - keep them for visual feedback
-            // cell.classList.remove('drop-hover', 'bg-success-subtle', 'bg-warning-subtle', 'bg-danger-subtle');
-        });
+        cell.addEventListener('dragleave', () => cell.classList.remove('drop-hover'));
         cell.addEventListener('drop', async e => {
             e.preventDefault();
             cell.classList.remove('drop-hover');
@@ -316,7 +425,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                         data-group-id=\"${swapData.swappedHtml.group_id ?? ''}\"
                                         data-teacher-id=\"${teacherId}\"
                                         data-group-name=\"${swapData.swappedHtml.group}\"
-                                        data-subject-name=\"${swapData.swappedHtml.subject ?? ''}\">${swapData.swappedHtml.group}</span>`;
+                                        data-subject-name=\"${swapData.swappedHtml.subject ?? ''}\">${swapData.swappedHtml.group}${swapData.swappedHtml.room_number ? ' (' + swapData.swappedHtml.room_number + ')' : ''}<br/><small>${swapData.swappedHtml.subject ?? '—'}</small></span>`;
                                 originalCell.innerHTML = swappedBadgeHtml;
                                 const badge = originalCell.querySelector('.tt-trigger');
                                 initBadgeDrag(badge);
@@ -341,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function(){
                                 data-group-id=\"${groupId}\"
                                 data-teacher-id=\"${teacherId}\"
                                 data-group-name=\"${swapData.html.group}\"
-                                data-subject-name=\"${swapData.html.subject ?? ''}\">${swapData.html.group}</span>`;
+                                data-subject-name=\"${swapData.html.subject ?? ''}\">${swapData.html.group}${swapData.html.room_number ? ' (' + swapData.html.room_number + ')' : ''}<br/><small>${swapData.html.subject ?? '—'}</small></span>`;
                         cell.innerHTML = badgeHtml;
                         const targetBadge = cell.querySelector('.tt-trigger');
                         initBadgeDrag(targetBadge);
@@ -373,7 +482,7 @@ document.addEventListener('DOMContentLoaded', function(){
                             data-group-id=\"${groupId}\"
                             data-teacher-id=\"${teacherId}\"
                             data-group-name=\"${data.html.group}\"
-                            data-subject-name=\"${data.html.subject ?? ''}\">${data.html.group}</span>`;
+                            data-subject-name=\"${data.html.subject ?? ''}\">${data.html.group}${data.html.room_number ? ' (' + data.html.room_number + ')' : ''}<br/><small>${data.html.subject ?? '—'}</small></span>`;
                     cell.innerHTML = badgeHtml;
                     const badge = cell.querySelector('.tt-trigger');
                     initBadgeDrag(badge);
@@ -400,15 +509,7 @@ document.addEventListener('DOMContentLoaded', function(){
                         body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, day: day, slot: slot })
                     });
                     const data = await resp.json();
-                    console.log('Manual slot response:', resp.status, data);
                     if (!resp.ok || !data.success) {
-                        // Check if it's a room conflict
-                        if (data.conflict_type === 'room' && data.available_rooms) {
-                            console.log('Room conflict detected, opening modal...', data);
-                            await showRoomConflictModal(data, { day, slot, teacherId, groupId, groupName, subjectName });
-                            return;
-                        }
-                        console.log('Error response (not room conflict):', data);
                         showErrorModal('Klaida', data.error || 'Nepavyko įtraukti pamokos');
                         return;
                     }
@@ -428,15 +529,18 @@ document.addEventListener('DOMContentLoaded', function(){
                                             data-group-id=\"${groupId}\"
                                             data-teacher-id=\"${teacherId}\"
                                             data-group-name=\"${data.html.group}\"
-                                            data-subject-name=\"${data.html.subject ?? ''}\">${data.html.group}</span>`;
+                                            data-subject-name=\"${data.html.subject ?? ''}\">${data.html.group}${data.html.room_number ? ' (' + data.html.room_number + ')' : ''}<br/><small>${data.html.subject ?? '—'}</small></span>`;
                     cell.innerHTML = badgeHtml;
                     scheduled = true;
                     const badge = cell.querySelector('.tt-trigger');
                     try { initBadgeDrag(badge); initTooltip(badge); } catch(e) { /* ignore tooltip init errors */ }
-                    
-                    // Update unscheduled list using backend data (this handles removal if remaining = 0)
-                    if (data.group_id && data.remaining_lessons !== undefined && data.group_data) {
-                        updateUnscheduledList(data.group_id, data.remaining_lessons, data.group_data);
+                    const rem = parseInt(dragged.dataset.remaining,10)-1;
+                    if (rem <= 0) {
+                        dragged.remove();
+                    } else {
+                        dragged.dataset.remaining = rem;
+                        const countEl = dragged.querySelector('.remaining-badge');
+                        if (countEl) { countEl.textContent = rem; }
                     }
                     flashMessage('Pamoka sėkmingai įtraukta', 'success');
                 } catch (err) {
@@ -723,309 +827,6 @@ function showErrorModal(title, message) {
     modal.addEventListener('hidden.bs.modal', () => modal.remove());
 }
 
-// Room conflict resolution modal
-async function showRoomConflictModal(conflictData, context) {
-    const { day, slot, teacherId, groupId, groupName, subjectName } = context;
-    
-    const modal = document.createElement('div');
-    modal.className = 'modal fade';
-    modal.tabIndex = -1;
-    
-    const roomOptionsHtml = conflictData.available_rooms.map(room => 
-        `<option value="${room.id}">${room.label}</option>`
-    ).join('');
-    
-    modal.innerHTML = `
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title"><i class="bi bi-door-closed"></i> Kabineto konfliktas</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-warning mb-3">
-                        <strong><i class="bi bi-exclamation-triangle"></i> ${conflictData.error}</strong>
-                    </div>
-                    
-                    <p class="mb-2"><strong>Dabartinis kabinetas:</strong> ${conflictData.current_room.number} ${conflictData.current_room.name}</p>
-                    <p class="mb-3"><strong>Grupė:</strong> ${conflictData.group.name} (${conflictData.group.subject_name})</p>
-                    
-                    <hr>
-                    
-                    <div class="mb-3">
-                        <label for="newRoomSelect" class="form-label"><strong>Pasirinkite alternatyvų kabinetą:</strong></label>
-                        <select class="form-select" id="newRoomSelect">
-                            <option value="">-- Pasirinkite kabinetą --</option>
-                            ${roomOptionsHtml}
-                        </select>
-                    </div>
-                    
-                    <div class="alert alert-info mb-0" id="roomSelectionHint">
-                        <i class="bi bi-info-circle"></i> Pasirinkite kabinetą, kad patikrintume jo prieinamumą
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
-                    <button type="button" class="btn btn-primary" id="saveAlternativeRoom" disabled>
-                        <i class="bi bi-check-circle"></i> Pridėti
-                    </button>
-                </div>
-            </div>
-        </div>`;
-    
-    document.body.appendChild(modal);
-    const bsModal = new bootstrap.Modal(modal);
-    bsModal.show();
-    
-    const saveBtn = modal.querySelector('#saveAlternativeRoom');
-    const roomSelect = modal.querySelector('#newRoomSelect');
-    const hint = modal.querySelector('#roomSelectionHint');
-    let selectedRoomId = null;
-    let roomAvailability = {};
-    
-    // Check availability for a specific room
-    async function checkRoomAvailability(roomId) {
-        if (!roomId) return;
-        
-        console.log('Checking room availability for room:', roomId);
-        
-        // Show checking state
-        hint.className = 'alert alert-info mb-0';
-        hint.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Tikrinama kabineto prieinamumas...';
-        saveBtn.disabled = true;
-        
-        try {
-            const resp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    group_id: groupId, 
-                    teacher_id: teacherId, 
-                    day: day, 
-                    slot: slot,
-                    check_room_id: parseInt(roomId, 10)
-                })
-            });
-            const data = await resp.json();
-            console.log('Room availability check response:', data);
-            
-            // Check if there's a room conflict
-            let hasRoomConflict = false;
-            if (data.conflicts && Array.isArray(data.conflicts)) {
-                hasRoomConflict = data.conflicts.some(c => {
-                    if (typeof c === 'object' && c !== null) {
-                        return c.type === 'room';
-                    }
-                    if (typeof c === 'string') {
-                        return c.includes('Kabinetas') || c.includes('užimtas');
-                    }
-                    return false;
-                });
-            }
-            
-            const isAvailable = !hasRoomConflict;
-            roomAvailability[roomId] = isAvailable;
-            console.log('Room available:', isAvailable);
-            
-            if (isAvailable) {
-                hint.className = 'alert alert-success mb-0';
-                hint.innerHTML = '<i class="bi bi-check-circle"></i> Pasirinktas kabinetas laisvas. Galite pridėti.';
-                saveBtn.disabled = false;
-            } else {
-                hint.className = 'alert alert-danger mb-0';
-                hint.innerHTML = '<i class="bi bi-x-circle"></i> Pasirinktas kabinetas užimtas. Pasirinkite kitą.';
-                saveBtn.disabled = true;
-            }
-        } catch (err) {
-            console.error('Error checking room availability:', err);
-            hint.className = 'alert alert-secondary mb-0';
-            hint.innerHTML = '<i class="bi bi-question-circle"></i> Nepavyko patikrinti. Bandykite dar kartą.';
-            roomAvailability[roomId] = false;
-            saveBtn.disabled = true;
-        }
-    }
-    
-    // Handle room selection change
-    roomSelect.addEventListener('change', async (e) => {
-        selectedRoomId = e.target.value ? parseInt(e.target.value) : null;
-        console.log('Room selected:', selectedRoomId);
-        
-        if (!selectedRoomId) {
-            hint.className = 'alert alert-info mb-0';
-            hint.innerHTML = '<i class="bi bi-info-circle"></i> Pasirinkite kabinetą, kad patikrintume jo prieinamumą';
-            saveBtn.disabled = true;
-            return;
-        }
-        
-        await checkRoomAvailability(selectedRoomId);
-    });
-    
-    // Handle save button
-    saveBtn.addEventListener('click', async () => {
-        if (!selectedRoomId || roomAvailability[selectedRoomId] !== true) {
-            return;
-        }
-        
-        // Close current modal
-        bsModal.hide();
-        
-        // Open new modal for group copy creation
-        showGroupCopyModal(groupId, groupName, subjectName, teacherId, day, slot, selectedRoomId);
-    });
-    
-    modal.addEventListener('hidden.bs.modal', () => modal.remove());
-}
-
-function showGroupCopyModal(groupId, groupName, subjectName, teacherId, day, slot, newRoomId) {
-    const modal = document.createElement('div');
-    modal.className = 'modal fade';
-    modal.tabIndex = -1;
-    
-    // Fetch group info to get remaining lessons
-    fetch(`{{ url('/admin/schools/' . $school->id . '/timetables/' . $timetable->id) }}/group-info/${groupId}`)
-        .then(r => r.json())
-        .then(groupInfo => {
-            const remainingLessons = groupInfo.remaining_lessons || 1;
-            const totalLessons = groupInfo.lessons_per_week || remainingLessons;
-            
-            modal.innerHTML = `
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                        <div class="modal-header bg-primary text-white">
-                            <h5 class="modal-title"><i class="bi bi-copy"></i> Sukurti grupės kopiją</h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="alert alert-info mb-3">
-                                <i class="bi bi-info-circle"></i> Bus sukurta nauja grupė su pasirinktu kabinetu. 
-                                Originalios grupės pamokų skaičius bus sumažintas.
-                            </div>
-                            
-                            <p><strong>Originali grupė:</strong> ${groupName}</p>
-                            <p><strong>Dalykas:</strong> ${subjectName}</p>
-                            <p><strong>Originalios grupės pamokos per savaitę:</strong> ${totalLessons}</p>
-                            <p><strong>Nesuplanuotos pamokos:</strong> ${remainingLessons}</p>
-                            
-                            <hr>
-                            
-                            <div class="mb-3">
-                                <label class="form-label"><strong>Naujos grupės pavadinimas:</strong></label>
-                                <input type="text" class="form-control" id="newGroupName" value="${groupName}">
-                                <small class="text-muted">Galite palikti tą patį pavadinimą arba pakeisti</small>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label"><strong>Naujos grupės pamokų kiekis per savaitę:</strong></label>
-                                <input type="number" class="form-control" id="newGroupLessons" value="1" min="1" max="${remainingLessons}">
-                                <small class="text-muted">Maks: ${remainingLessons} (nesuplanuotų pamokų)</small>
-                            </div>
-                            
-                            <div class="alert alert-warning mb-0">
-                                <strong>Veiksmai:</strong>
-                                <ul class="mb-0 mt-2">
-                                    <li>Sukuriama nauja grupė su pamokų kiekiu: <span id="previewNewLessons">1</span></li>
-                                    <li>Originalios grupės pamokos sumažinamos iki: <span id="previewOriginalLessons">${totalLessons - 1}</span></li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
-                            <button type="button" class="btn btn-primary" id="confirmCreateCopy">
-                                <i class="bi bi-check-circle"></i> Sukurti kopiją ir pridėti pamoką
-                            </button>
-                        </div>
-                    </div>
-                </div>`;
-            
-            document.body.appendChild(modal);
-            const copyModal = new bootstrap.Modal(modal);
-            copyModal.show();
-            
-            const newGroupLessonsInput = modal.querySelector('#newGroupLessons');
-            const previewNewLessons = modal.querySelector('#previewNewLessons');
-            const previewOriginalLessons = modal.querySelector('#previewOriginalLessons');
-            const confirmBtn = modal.querySelector('#confirmCreateCopy');
-            
-            // Update preview when lessons change
-            newGroupLessonsInput.addEventListener('input', () => {
-                const newLessons = parseInt(newGroupLessonsInput.value) || 1;
-                previewNewLessons.textContent = newLessons;
-                previewOriginalLessons.textContent = totalLessons - newLessons;
-            });
-            
-            confirmBtn.addEventListener('click', async () => {
-                const newGroupNameVal = modal.querySelector('#newGroupName').value.trim();
-                const newLessonsCount = parseInt(newGroupLessonsInput.value) || 1;
-                
-                if (!newGroupNameVal) {
-                    alert('Įveskite grupės pavadinimą');
-                    return;
-                }
-                
-                if (newLessonsCount < 1 || newLessonsCount > remainingLessons) {
-                    alert(`Pamokų kiekis turi būti nuo 1 iki ${remainingLessons}`);
-                    return;
-                }
-                
-                confirmBtn.disabled = true;
-                confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Kuriama...';
-                
-                try {
-                    const resp = await fetch(`{{ route('schools.timetables.manual-slot-alt-room', [$school, $timetable]) }}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            group_id: groupId,
-                            teacher_id: teacherId,
-                            day: day,
-                            slot: slot,
-                            alternative_room_id: newRoomId,
-                            new_group_name: newGroupNameVal,
-                            new_group_lessons: newLessonsCount
-                        })
-                    });
-                    
-                    const data = await resp.json();
-                    
-                    if (!resp.ok || !data.success) {
-                        alert(data.error || 'Nepavyko sukurti kopijos');
-                        confirmBtn.disabled = false;
-                        confirmBtn.innerHTML = '<i class="bi bi-check-circle"></i> Sukurti kopiją ir pridėti pamoką';
-                        return;
-                    }
-                    
-                    copyModal.hide();
-                    
-                    // Update unscheduled list if data provided
-                    if (typeof updateUnscheduledList === 'function' && data.group_id !== undefined && data.remaining_lessons !== undefined && data.group_data) {
-                        updateUnscheduledList(data.group_id, data.remaining_lessons, data.group_data);
-                    }
-                    
-                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-                    location.reload(); // Reload to show updated timetable
-                } catch (err) {
-                    alert('Klaida siunčiant užklausą');
-                    confirmBtn.disabled = false;
-                    confirmBtn.innerHTML = '<i class="bi bi-check-circle"></i> Sukurti kopiją ir pridėti pamoką';
-                }
-            });
-            
-            modal.addEventListener('hidden.bs.modal', () => modal.remove());
-        })
-        .catch(err => {
-            console.error('Error fetching group info:', err);
-            alert('Nepavyko gauti grupės informacijos');
-        });
-}
-
 // Helper function to create tooltip data
 function createTooltipData(groupName, subjectName, roomDisplay, teacherName, day, slot) {
     const tooltipHtml = '<div class="tt-inner">'
@@ -1041,14 +842,74 @@ function createTooltipData(groupName, subjectName, roomDisplay, teacherName, day
 
 // Helper function to initialize tooltip on element
 function initTooltip(el) {
-    // Tooltips are initialized globally - this function is now for reference only
-    // No need to reinitialize here
+    if (!window.bootstrap || !el) return;
+    const b64 = el.getAttribute('data-tooltip-b64');
+    if (!b64) return;
+    try {
+        const html = decodeURIComponent(Array.prototype.map.call(atob(b64), c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        el.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
+        new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
+    } catch(e) { }
+}
+
+function showGroupInfo(groupName, groupId, scheduledCount) {
+    // Get unscheduled count from unscheduled panel
+    const unscheduledItem = document.querySelector(`.unscheduled-item[data-group-id="${groupId}"]`);
+    let unscheduledCount = 0;
+    let studentCount = 0;
+    let roomNumbers = new Set();
+    let subjectName = '';
+    let teacherName = '';
+    
+    if (unscheduledItem) {
+        const remainingBadge = unscheduledItem.querySelector('.remaining-badge');
+        if (remainingBadge) {
+            unscheduledCount = parseInt(remainingBadge.textContent) || 0;
+        }
+    }
+    
+    // Get details from all badges with this group name and ID
+    document.querySelectorAll(`.tt-trigger[data-group-name="${groupName}"][data-group-id="${groupId}"]`).forEach(badge => {
+        const count = parseInt(badge.dataset.studentCount) || 0;
+        if (count > 0 && studentCount === 0) studentCount = count;
+        
+        const roomNum = badge.dataset.roomNumber;
+        if (roomNum) roomNumbers.add(roomNum);
+        
+        if (!subjectName && badge.dataset.subjectName) {
+            subjectName = badge.dataset.subjectName;
+        }
+        
+        if (!teacherName && badge.dataset.teacherName) {
+            teacherName = badge.dataset.teacherName;
+        }
+    });
+    
+    const totalLessons = scheduledCount + unscheduledCount;
+    const roomsDisplay = roomNumbers.size > 0 ? Array.from(roomNumbers).join(', ') : '—';
+    
+    // Update notification
+    document.getElementById('groupInfoName').textContent = groupName;
+    document.getElementById('groupInfoSubject').textContent = subjectName || '—';
+    document.getElementById('groupInfoTeacher').textContent = teacherName || '—';
+    document.getElementById('groupInfoRooms').textContent = roomsDisplay;
+    document.getElementById('groupInfoStudents').textContent = studentCount > 0 ? studentCount : '—';
+    document.getElementById('groupInfoScheduled').textContent = scheduledCount;
+    document.getElementById('groupInfoUnscheduled').textContent = unscheduledCount;
+    document.getElementById('groupInfoTotal').textContent = totalLessons;
+
+    // Set action links
+    const basePath = `/admin/schools/{{ $school->id }}/timetables/{{ $timetable->id }}/groups/${groupId}`;
+    const viewLink = document.getElementById('groupInfoViewLink');
+    const editLink = document.getElementById('groupInfoEditLink');
+    if (viewLink) viewLink.href = basePath + '/details';
+    if (editLink) editLink.href = basePath + '/details#edit';
+    
+    // Show notification
+    document.getElementById('groupInfoNotification').style.display = 'block';
 }
 
 function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeElement) {
-    event.preventDefault();
-    event.stopPropagation();
-    
     // Remove any existing context menu
     const existingMenu = document.getElementById('lessonContextMenu');
     if (existingMenu) existingMenu.remove();
@@ -1057,60 +918,34 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
     const menu = document.createElement('div');
     menu.id = 'lessonContextMenu';
     menu.className = 'context-menu';
-    // Inline fallback styles so menu renders even if CSS classes don’t apply
-    Object.assign(menu.style, {
-        position: 'fixed',
-        background: '#ffffff',
-        border: '2px solid #dee2e6',
-        borderRadius: '8px',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-        minWidth: '280px',
-        zIndex: '2000',
-        fontSize: '14px',
-        padding: '8px 0'
-    });
     menu.innerHTML = `
-        <div class="context-menu-header" style="padding:12px 16px; font-weight:600; color:#212529; border-bottom:2px solid #e9ecef; background:#f8f9fa; border-radius:6px 6px 0 0; font-size:14px;">
+        <div class="context-menu-header">
             <i class="bi bi-gear-fill me-2"></i>${groupName}
             ${subjectName ? '<small class="ms-2 text-muted">' + subjectName + '</small>' : ''}
         </div>
-        <div class="context-menu-item" data-action="edit" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; transition:all .15s ease; color:#212529; white-space:nowrap; border:none; background:transparent; text-align:left;">
+        <div class="context-menu-item" data-action="edit">
             <i class="bi bi-pencil-square me-2"></i>Redaguoti grupės nustatymus
         </div>
-        <div class="context-menu-divider" style="height:1px; background:#d0d0d0; margin:6px 0; border:none;"></div>
-        <div class="context-menu-item text-danger" data-action="unschedule" style="padding:12px 16px; cursor:pointer; display:flex; align-items:center; transition:all .15s ease; color:#dc3545; white-space:nowrap; border:none; background:transparent; text-align:left;">
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item text-danger" data-action="unschedule">
             <i class="bi bi-arrow-left-circle me-2"></i>Perkelti į nesuplanuotų sąrašą
         </div>
     `;
     
-    // Position menu at mouse cursor using clientX/clientY with fixed position
-    menu.style.position = 'fixed';
-    menu.style.left = '0px';
-    menu.style.top = '0px';
+    // Position menu at mouse cursor
+    menu.style.left = event.pageX + 'px';
+    menu.style.top = event.pageY + 'px';
     
-    // Add to DOM to calculate dimensions
     document.body.appendChild(menu);
     
-    // Get actual dimensions for adjustment
-    const menuRect = menu.getBoundingClientRect();
-    const menuWidth = menuRect.width;
-    const menuHeight = menuRect.height;
-    
-    let adjustedLeft = event.clientX;
-    let adjustedTop = event.clientY;
-    
-    // Keep menu within viewport with 10px margin
-    if (adjustedLeft + menuWidth + 10 > window.innerWidth) {
-        adjustedLeft = Math.max(10, window.innerWidth - menuWidth - 10);
+    // Adjust position if menu goes off screen
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+        menu.style.left = (event.pageX - rect.width) + 'px';
     }
-    
-    if (adjustedTop + menuHeight + 10 > window.innerHeight) {
-        adjustedTop = Math.max(10, window.innerHeight - menuHeight - 10);
+    if (rect.bottom > window.innerHeight) {
+        menu.style.top = (event.pageY - rect.height) + 'px';
     }
-    
-    // Apply position
-    menu.style.left = adjustedLeft + 'px';
-    menu.style.top = adjustedTop + 'px';
     
     // Handle menu item clicks
     menu.querySelectorAll('.context-menu-item').forEach(item => {
@@ -1124,24 +959,6 @@ function showContextMenu(event, slotId, groupId, groupName, subjectName, badgeEl
             } else if (action === 'unschedule') {
                 await unscheduleLesson(slotId, badgeElement);
             }
-        });
-    });
-    // Inline hover effects
-    menu.querySelectorAll('.context-menu-item').forEach(item => {
-        item.addEventListener('mouseenter', () => {
-            if (item.classList.contains('text-danger')) {
-                item.style.background = '#ffe0e0';
-                item.style.color = '#dc3545';
-            } else {
-                item.style.background = '#f0f0f0';
-                item.style.color = '#212529';
-            }
-            item.style.paddingLeft = '20px';
-        });
-        item.addEventListener('mouseleave', () => {
-            item.style.background = 'transparent';
-            item.style.color = item.classList.contains('text-danger') ? '#dc3545' : '#212529';
-            item.style.paddingLeft = '16px';
         });
     });
     
@@ -1274,7 +1091,6 @@ async function openGroupEditModal(groupId) {
                 
                 if (submitResp.ok && result.success) {
                     bsModal.hide();
-                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                     flashMessage('Grupė sėkmingai atnaujinta', 'success');
                     setTimeout(() => window.location.reload(), 1000);
                 } else {
@@ -1345,8 +1161,8 @@ function updateUnscheduledList(groupId, remainingLessons, groupData) {
         if (existingItem) {
             // Update existing item
             existingItem.dataset.remaining = remainingLessons;
-            const countEl = existingItem.querySelector('.remaining-count');
-            if (countEl) { countEl.textContent = `(${remainingLessons})`; }
+            const countEl = existingItem.querySelector('.remaining-badge');
+            if (countEl) { countEl.textContent = remainingLessons; }
         } else {
             // Create new item with new design (no badges)
             const newItem = document.createElement('div');
@@ -1363,11 +1179,10 @@ function updateUnscheduledList(groupId, remainingLessons, groupData) {
             newItem.innerHTML = `
                 <div class="flex-grow-1">
                     <div class="unscheduled-title">${groupData.group_name}
-                        <span class="remaining-count">(${remainingLessons})</span>
+                        <span class="badge bg-primary ms-2 remaining-badge">${remainingLessons}</span>
                     </div>
                     <div class="unscheduled-meta">
                         <span class="unscheduled-subject">${groupData.subject_name}</span>
-                        <span class="unscheduled-room"><i class="bi bi-door-closed"></i> ${groupData.room_number || '—'}</span>
                     </div>
                 </div>
                 <div class="ms-2">
@@ -1389,15 +1204,7 @@ function updateUnscheduledList(groupId, remainingLessons, groupData) {
             // Make it draggable
             newItem.addEventListener('dragstart', e => {
                 dragged = newItem;
-                draggedKind = 'unscheduled';
                 e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', groupId);
-                newItem.classList.add('dragging');
-            });
-            newItem.addEventListener('dragend', () => {
-                dragged?.classList.remove('dragging');
-                dragged = null;
-                draggedKind = null;
             });
         }
     } else if (existingItem) {
@@ -1557,9 +1364,6 @@ async function findAvailableSlots(groupId, groupName, subjectName, teacherId) {
         cell.style.position='relative';
         cell.appendChild(badge);
     });
-    
-    // Setup drag-drop listeners for room conflict badges
-    setupBadgeDragDrop();
 }
 
 function findCellByDayAndSlot(day, slot) {
@@ -1748,8 +1552,22 @@ function showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, d
             <h6 class="mt-3">Konfliktai (spauskite detalesnei informacijai):</h6>
             ${conflictsHtml}
             
-            <div class="alert alert-info mt-3">
-                <i class="bi bi-info-circle"></i> Norėdami pridėti šią pamoką su kitu kabinetu, spauskite žemiau
+            <h6 class="mt-3">Sprendimas - pasirinkite kitą kabinetą:</h6>
+            <div class="d-flex gap-2 align-items-end">
+                <div class="flex-grow-1">
+                    <select class="form-select" id="newRoomSelect">
+                        <option value="">-- Pasirinkite kabinetą --</option>
+                        ${availableRooms.map(r => `
+                            <option value="${r.id}" ${r.id == currentRoomId ? 'selected' : ''}>
+                                ${r.number} ${r.name || ''}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+                <button type="button" class="btn btn-warning" 
+                        onclick="addLessonWithNewRoom(${groupId}, ${teacherId}, '${day}', ${slot}, 'newRoomSelect'); bootstrap.Modal.getInstance(document.querySelector('.modal.show')).hide();">
+                    <i class="bi bi-plus-circle"></i> Pridėti
+                </button>
             </div>
         `;
     }
@@ -1771,11 +1589,6 @@ function showSlotAvailabilityModal(groupId, groupName, subjectName, teacherId, d
                         <button type="button" class="btn btn-success" 
                                 onclick="addLessonToSlot(${groupId}, ${teacherId}, '${day}', ${slot}, null); bootstrap.Modal.getInstance(document.querySelector('.modal.show')).hide();">
                             <i class="bi bi-plus-circle"></i> Pridėti pamoką
-                        </button>
-                    ` : status === 'room_conflict' ? `
-                        <button type="button" class="btn btn-warning"
-                                onclick="showRoomConflictModal({available_rooms: ${JSON.stringify(availableRooms).replace(/"/g, '&quot;')}, current_room: {id: ${currentRoomId}}}, {day: '${day}', slot: ${slot}, teacherId: ${teacherId}, groupId: ${groupId}, groupName: '${groupName}', subjectName: '${subjectName}'}); bootstrap.Modal.getInstance(document.querySelector('.modal.show')).hide();">
-                            <i class="bi bi-door-closed"></i> Kurti grupės kopiją su kitu kabinetu
                         </button>
                     ` : ''}
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Uždaryti</button>
@@ -1916,7 +1729,6 @@ async function addLessonToSlot(groupId, teacherId, day, slot, roomId) {
         
         const data = await resp.json();
         if (data.success) {
-            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
             flashMessage('Pamoka sėkmingai pridėta', 'success');
             setTimeout(() => location.reload(), 1000);
         } else {
@@ -2069,153 +1881,6 @@ function flashMessage(msg,type){
     const el=document.createElement('div'); el.className=`alert alert-${type} py-1 px-2 mb-2`; el.textContent=msg; box.appendChild(el); setTimeout(()=>{ el.remove(); if(!box.children.length) box.remove(); },3000);
 }
 
-// Setup badge drag-over listeners for room conflict badges (must be OUTSIDE DOMContentLoaded)
-function setupBadgeDragDrop() {
-    document.querySelectorAll('.availability-badge.bg-warning').forEach(badge => {
-        // Remove existing listeners to avoid duplicates
-        const newBadge = badge.cloneNode(true);
-        badge.parentNode.replaceChild(newBadge, badge);
-        const updatedBadge = newBadge;
-        
-        updatedBadge.addEventListener('dragover', e => {
-            if (!dragged || draggedKind !== 'unscheduled') return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            updatedBadge.style.opacity = '0.7';
-            updatedBadge.style.transform = 'scale(1.2)';
-        });
-        updatedBadge.addEventListener('dragleave', () => {
-            updatedBadge.style.opacity = '1';
-            updatedBadge.style.transform = 'scale(1)';
-        });
-        updatedBadge.addEventListener('drop', async e => {
-            e.preventDefault();
-            e.stopPropagation(); // PREVENT parent drop handler from firing!
-            updatedBadge.style.opacity = '1';
-            updatedBadge.style.transform = 'scale(1)';
-            
-            if (!dragged || draggedKind !== 'unscheduled') return;
-            
-            // Get cell info (parent .timetable-cell)
-            const cell = updatedBadge.closest('.timetable-cell');
-            if (!cell) return;
-            
-            const groupId = dragged.dataset.groupId;
-            const groupName = dragged.dataset.groupName;
-            const subjectName = dragged.dataset.subjectName;
-            const teacherId = cell.dataset.teacherId;
-            const day = cell.dataset.day;
-            const slot = cell.dataset.slot;
-            
-            // Fetch conflict data
-            try {
-                const resp = await fetch(`{{ route('schools.timetables.check-conflict', [$school, $timetable]) }}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, day: day, slot: slot })
-                });
-                const data = await resp.json();
-                console.log('Drag-drop conflict check:', data);
-                
-                // Check if there's a room conflict in the conflicts array
-                const hasRoomConflict = data.conflicts && Array.isArray(data.conflicts) && data.conflicts.some(c => 
-                    typeof c === 'object' && c.type === 'room'
-                );
-                
-                // If it's only a room conflict (no students/teacher conflicts), show group copy modal
-                if (hasRoomConflict && data.available_rooms) {
-                    console.log('Room conflict detected, showing group copy flow');
-                    showRoomConflictModal(data, { day, slot, teacherId, groupId, groupName, subjectName });
-                    return;
-                }
-                
-                // If there are blocking conflicts (not just room), show error
-                if (data.hasConflicts) {
-                    console.log('Other conflicts detected:', data.message);
-                    showErrorModal('Aptiktai konfliktai', data.message || 'Šiame langelyje negalima pridėti pamokos');
-                    return;
-                }
-                
-                // If no conflicts, add lesson directly
-                console.log('No conflicts, adding lesson');
-                try {
-                    const addResp = await fetch(`{{ route('schools.timetables.manual-slot', [$school, $timetable]) }}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify({ group_id: groupId, teacher_id: teacherId, day: day, slot: slot })
-                    });
-                    const addData = await addResp.json();
-                    console.log('Add lesson response:', addResp.status, addData);
-                    
-                    if (!addResp.ok || !addData.success) {
-                        // Check if it's a room conflict
-                        if (addData.conflict_type === 'room' && addData.available_rooms) {
-                            console.log('Room conflict detected during add, showing modal...', addData);
-                            showRoomConflictModal(addData, { day, slot, teacherId, groupId, groupName, subjectName });
-                            return;
-                        }
-                        console.log('Error response:', addData);
-                        showErrorModal('Klaida', addData.error || 'Nepavyko pridėti pamokos');
-                        return;
-                    }
-                    
-                    // Update cell with new badge
-                    const tooltipHtml = `<div class=\"tt-inner\">`
-                      + `<div class=\"tt-row tt-row-head\"><i class=\"bi bi-clock-history tt-ico\"></i><span class=\"tt-val\">${day} • ${slot} pamoka</span></div>`
-                      + `<div class=\"tt-divider\"></div>`
-                      + `<div class=\"tt-row\"><i class=\"bi bi-collection-fill tt-ico\"></i><span class=\"tt-val\">${addData.html.group}</span></div>`
-                      + `<div class=\"tt-row\"><i class=\"bi bi-book-half tt-ico\"></i><span class=\"tt-val\">${addData.html.subject ?? '—'}</span></div>`
-                      + `<div class=\"tt-row\"><i class=\"bi bi-door-closed tt-ico\"></i><span class=\"tt-val\">${addData.html.room ?? '—'}</span></div>`
-                      + `<div class=\"tt-row\"><i class=\"bi bi-person-badge tt-ico\"></i><span class=\"tt-val\">${addData.html.teacher_name ?? '—'}</span></div>`
-                      + `</div>`;
-                    const b64 = btoa(unescape(encodeURIComponent(tooltipHtml)));
-                    cell.innerHTML = `<span class=\"badge bg-secondary tt-trigger\" style=\"font-size:0.75rem; cursor:move;\" data-tooltip-b64=\"${b64}\" draggable=\"true\"
-                            data-kind=\"scheduled\"
-                            data-slot-id=\"${addData.html.slot_id}\"
-                            data-group-id=\"${groupId}\"
-                            data-teacher-id=\"${teacherId}\"
-                            data-group-name=\"${addData.html.group}\"
-                            data-subject-name=\"${addData.html.subject ?? ''}\"
-                    >${addData.html.group}</span>`;
-                    if (window.bootstrap) {
-                        const badge = cell.querySelector('.tt-trigger');
-                        initBadgeDrag(badge);
-                        // Initialize tooltip for the new element only (avoid double init)
-                        const b64 = badge.getAttribute('data-tooltip-b64');
-                        const html = b64 ? decodeURIComponent(Array.prototype.map.call(atob(b64), c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')) : '';
-                        if(html){
-                            badge.setAttribute('aria-label', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
-                            const existing = bootstrap.Tooltip.getInstance(badge);
-                            if (existing) { existing.dispose(); }
-                            const tt = new bootstrap.Tooltip(badge, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-                            badge.dataset.ttInit = '1';
-                        }
-                    }
-                    
-                    // Update unscheduled list using backend data
-                    if (addData.group_id && addData.remaining_lessons !== undefined && addData.group_data) {
-                        updateUnscheduledList(addData.group_id, addData.remaining_lessons, addData.group_data);
-                    }
-                    flashMessage('Pamoka sėkmingai įtraukta', 'success');
-                } catch(err) {
-                    showErrorModal('Klaida', 'Klaida siunčiant užklausą');
-                }
-            } catch (err) {
-                console.error('Error checking conflicts:', err);
-                showErrorModal('Klaida', 'Klaida tikrinant konfliktus');
-            }
-        });
-    });
-}
-
 function clearAvailabilityMarks(){
     // Remove availability badges and cell highlight classes
     document.querySelectorAll('.availability-badge').forEach(b=>b.remove());
@@ -2332,7 +1997,6 @@ async function openEditGroupModal(groupId, buttonElement) {
                 
                 if (result.success) {
                     bsEditModal.hide();
-                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
                     flashMessage('Grupė atnaujinta', 'success');
                     setTimeout(() => location.reload(), 1000);
                 } else {
@@ -2351,24 +2015,17 @@ async function openEditGroupModal(groupId, buttonElement) {
 
 // Initialize Bootstrap tooltips for data-tooltip-b64
 if (window.bootstrap) {
-    if (!window.__tt_b64_init_done) {
-        window.__tt_b64_init_done = true;
     function b64ToUtf8(b64){
         try { return decodeURIComponent(Array.prototype.map.call(atob(b64), c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')); } catch(e){ return ''; }
     }
     document.querySelectorAll('[data-tooltip-b64]').forEach(function(el){
-        if (el.dataset.ttInit === '1') { return; }
         const b64 = el.getAttribute('data-tooltip-b64');
         const html = b64ToUtf8(b64);
         if(!html) return;
-        // Accessibility fallback only (avoid native browser tooltip)
-        el.setAttribute('aria-label', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
-        const existing = bootstrap.Tooltip.getInstance(el);
-        if (existing) { existing.dispose(); }
+        // Fallback plain title
+        el.setAttribute('title', html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim());
         new bootstrap.Tooltip(el, { title: html, html: true, sanitize: false, placement: 'top', trigger: 'hover focus', delay:{show:120, hide:60} });
-        el.dataset.ttInit = '1';
     });
-    }
 }
 </script>
 <style>
@@ -2384,58 +2041,43 @@ if (window.bootstrap) {
 }
 
 .context-menu {
-    position: fixed;
+    position: absolute;
     background: white;
-    border: 2px solid #dee2e6;
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-    min-width: 280px;
-    z-index: 2000;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    min-width: 250px;
+    z-index: 9999;
     font-size: 14px;
-    padding: 8px 0;
-    display: block !important;
-    visibility: visible !important;
-    pointer-events: auto !important;
-    overflow: visible;
+    padding: 4px 0;
 }
 
 .context-menu-header {
-    padding: 12px 16px;
+    padding: 8px 12px;
     font-weight: 600;
-    color: #212529;
-    border-bottom: 2px solid #e9ecef;
+    color: #495057;
+    border-bottom: 1px solid #e9ecef;
     background: #f8f9fa;
     border-radius: 6px 6px 0 0;
-    font-size: 14px;
-}}
+    font-size: 13px;
+}
 
 .context-menu-item {
-    padding: 12px 16px;
+    padding: 10px 16px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    transition: all 0.15s ease;
-    color: #212529 !important;
-    white-space: nowrap !important;
-    border: none;
-    background: transparent;
-    text-align: left;
+    transition: background-color 0.15s ease;
+    color: #212529;
 }
 
 .context-menu-item:hover {
-    background: #f0f0f0;
-    color: #212529 !important;
-    padding-left: 20px;
-}
-
-.context-menu-item.text-danger {
-    color: #dc3545 !important;
+    background: #f8f9fa;
 }
 
 .context-menu-item.text-danger:hover {
-    background: #ffe0e0;
-    color: #dc3545 !important;
-    padding-left: 20px;
+    background: #fff5f5;
+    color: #dc3545;
 }
 
 .context-menu-item i {
@@ -2445,9 +2087,8 @@ if (window.bootstrap) {
 
 .context-menu-divider {
     height: 1px;
-    background: #d0d0d0;
-    margin: 6px 0;
-    border: none;
+    background: #e9ecef;
+    margin: 4px 0;
 }
 .unscheduled-item { cursor: move; padding: 0.25rem 0.5rem; border-radius: 4px; transition: background-color 0.2s; }
 .unscheduled-item:hover { background-color: #f8f9fa; }
@@ -2456,10 +2097,7 @@ if (window.bootstrap) {
 .unscheduled-title { font-weight: 600; color: #212529; }
 .unscheduled-meta { font-size: 0.85rem; color: #6c757d; display: flex; gap: 8px; align-items: baseline; }
 .unscheduled-subject { color: #198754; font-weight: 500; }
-.unscheduled-teacher { color: #fff; background: #212529; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; }
-.unscheduled-room { color:#0d6efd; }
-.unscheduled-room::before { content:'•'; margin:0 4px; }
-.remaining-count { color: #6c757d; font-weight: 400; margin-left: 4px; }
+.unscheduled-teacher { color: #212529; background: #212529; border-radius: 4px; padding: 2px 6px; color: #fff; font-size: 0.75rem; }
 
 /* Slot checking animation */
 .checking-slot {
@@ -2481,9 +2119,6 @@ if (window.bootstrap) {
     text-align: left;
     padding: 0.5rem;
     min-width: 200px;
-    background-color: #2d3748;
-    border-radius: 4px;
-    color: #ffffff;
 }
 .tt-row {
     display: flex;
@@ -2493,7 +2128,6 @@ if (window.bootstrap) {
 .tt-row-head {
     font-weight: 600;
     padding-bottom: 0.5rem;
-    color: #ffffff;
 }
 .tt-ico {
     width: 20px;
@@ -2502,7 +2136,6 @@ if (window.bootstrap) {
 }
 .tt-val {
     flex: 1;
-    color: #ffffff;
 }
 .tt-divider {
     border-top: 1px solid rgba(255,255,255,0.2);
@@ -2516,6 +2149,77 @@ if (window.bootstrap) {
     left: 0;
     z-index: 5;
     background: #fff;
+}
+
+/* Group highlighting styles */
+.tt-trigger.group-highlighted {
+    background-color: #0d6efd !important;
+    color: white !important;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.3);
+}
+
+.timetable-cell.group-cell-highlighted {
+    background-color: #cfe2ff;
+    outline: 2px dashed #0d6efd;
+    outline-offset: -1px;
+}
+
+/* Group info notification */
+.group-info-notification {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: white;
+    border: 2px solid #0d6efd;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    padding: 0;
+    min-width: 280px;
+    z-index: 1000;
+    font-size: 14px;
+}
+
+.group-info-close {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    cursor: pointer;
+    color: #6c757d;
+    font-size: 18px;
+    line-height: 1;
+    font-weight: bold;
+}
+
+.group-info-close:hover {
+    color: #212529;
+}
+
+.group-info-content {
+    padding: 12px 16px;
+}
+
+.group-info-content h6 {
+    margin: 0 0 12px 0;
+    color: #0d6efd;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.group-info-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    color: #495057;
+}
+
+.group-info-stat .label {
+    font-weight: 500;
+}
+
+.group-info-stat .value {
+    color: #212529;
+    font-weight: 600;
 }
 </style>
 @endpush

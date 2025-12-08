@@ -78,12 +78,13 @@ function renderGroupHTML(group) {
     const weekTypeLabel = group.week_type === 'all' ? 'Kiekv. savaitė' : (group.week_type === 'even' ? 'Lyginės' : 'Nelyginės');
     const roomBadge = group.room_number ? `<span class="badge bg-dark">${group.room_number} ${group.room_name || ''}</span>` : '';
     const priorityBadge = group.is_priority ? `<span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> Prioritetinė</span>` : '';
+    const groupDetailsUrl = `{{ route('schools.timetables.groups.details', [$school, $timetable, ':groupId']) }}`.replace(':groupId', group.id);
     
     return `
         <div class="modern-card mb-2" id="group${group.id}">
             <div class="d-flex justify-content-between align-items-center py-2 px-3" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#groupCollapse${group.id}" aria-expanded="false">
                 <div class="d-flex align-items-center gap-2">
-                    <strong>${group.name}</strong>
+                    <a href="${groupDetailsUrl}" class="group-name-link" onclick="event.stopPropagation()"><strong>${group.name}</strong></a>
                     <span class="badge bg-secondary">${group.subject_name || ''}</span>
                     <span class="badge bg-info text-dark">${group.teacher_name || ''}</span>
                     ${roomBadge}

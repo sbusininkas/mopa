@@ -163,3 +163,4 @@
   </script>
 </body>
 </html>
+<?php /**PATH C:\Users\herom\Desktop\Projektai\mopa\resources\views/welcome.blade.php ENDPATH**/ ?>
