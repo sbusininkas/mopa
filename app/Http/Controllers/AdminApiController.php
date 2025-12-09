@@ -221,6 +221,7 @@ class AdminApiController extends Controller
                 'first_name' => $studentModel->first_name,
                 'last_name' => $studentModel->last_name,
                 'full_name' => $studentModel->full_name,
+                'class_name' => $studentModel->class?->name ?? '',
             ],
             'grid' => $grid,
             'days' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],

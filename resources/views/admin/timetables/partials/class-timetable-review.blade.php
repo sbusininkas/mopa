@@ -1513,7 +1513,15 @@
                 
                 html += `<div class="student-timetable-card-responsive" data-student-id="${result.id}">
                     <div class="student-timetable-card-header">
-                        <h6>${result.full_name}</h6>
+                        <h6 style="margin: 0;">
+                            <a href="/admin/schools/{{ $school->id }}/timetables/{{ $timetable->id }}/student/${result.id}" 
+                               class="text-decoration-none text-dark" 
+                               title="Atidaryti ${result.full_name} tvarkaraštį"
+                               style="cursor: pointer;">
+                                ${result.full_name}
+                            </a>
+                            ${result.class_name ? `<small style="display: block; color: #666; font-weight: normal; font-size: 0.85rem; margin-top: 2px;">${result.class_name}</small>` : ''}
+                        </h6>
                     </div>
                     <table class="table student-timetable-small">
                         <thead>
