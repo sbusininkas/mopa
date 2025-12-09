@@ -1890,33 +1890,6 @@ function clearAvailabilityMarks(){
     document.querySelectorAll('.unscheduled-item.active-group').forEach(el=> el.classList.remove('active-group'));
 }
 
-// Click handler to highlight cells with same day/slot
-function initializeCellClickHandlers(){
-    document.querySelectorAll('.timetable-cell').forEach(cell => {
-        cell.addEventListener('mouseenter', function(e) {
-            // Don't trigger if clicking on draggable badge
-            if (e.target.closest('[draggable="true"]')) return;
-            
-            const day = this.dataset.day;
-            const slot = this.dataset.slot;
-            
-            // Highlight all cells with same day and slot
-            if (day && slot) {
-                document.querySelectorAll(`.timetable-cell[data-day="${day}"][data-slot="${slot}"]`).forEach(c => {
-                    c.classList.add('time-slot-highlighted');
-                });
-            }
-        });
-
-        cell.addEventListener('mouseleave', function() {
-            // Remove all highlights
-            document.querySelectorAll('.timetable-cell.time-slot-highlighted').forEach(c => {
-                c.classList.remove('time-slot-highlighted');
-            });
-        });
-    });
-}
-
 async function openEditGroupModal(groupId, buttonElement) {
     if (!groupId) return;
     
@@ -2189,12 +2162,6 @@ if (window.bootstrap) {
     background-color: #cfe2ff;
     outline: 2px dashed #0d6efd;
     outline-offset: -1px;
-}
-
-.timetable-cell.time-slot-highlighted {
-    background-color: #fff3cd !important;
-    border: 2px solid #ffc107 !important;
-    box-shadow: inset 0 0 0 1px #ffc107;
 }
 
 /* Group info notification */

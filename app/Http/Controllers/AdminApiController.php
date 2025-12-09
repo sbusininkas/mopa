@@ -297,4 +297,41 @@ class AdminApiController extends Controller
 
         return response()->json(['data' => $groups]);
     }
+
+    /**
+     * Get schedule (all slots) for a specific group in a timetable
+     */
+    public function getGroupSchedule($timetableId, $groupId)
+    {
+        $user = Auth::user();
+        $timetable = Timetable::findOrFail($timetableId);
+
+        // Authorization: supervisors allowed; school admins must match active school
+        if (!$user->isSupervisor()) {
+            $activeSchoolId = (int) session('active_school_id');
+            if (!$activeSchoolId || $activeSchoolId !== (int) $timetable->school_id || !$user->isSchoolAdmin($timetable->school_id)) {
+                abort(403);
+            }
+        }
+
+        // Get slots for this group (timetable_group_id is the foreign key)
+        $slots = TimetableSlot::where('timetable_id', $timetable->id)
+            ->where('timetable_group_id', $groupId)
+            ->with(['group.subject', 'group.teacherLoginKey'])
+            ->get();
+
+        // Format lessons
+        $lessons = $slots->map(function ($slot) {
+            return [
+                'day' => $slot->day,
+                'slot' => $slot->slot,
+                'subject' => $slot->group?->subject?->name ?? '',
+                'teacher' => $slot->group?->teacherLoginKey?->full_name ?? '',
+                'group_id' => $slot->timetable_group_id,
+                'group_name' => $slot->group?->name ?? '',
+            ];
+        })->values();
+
+        return response()->json(['data' => $lessons]);
+    }
 }

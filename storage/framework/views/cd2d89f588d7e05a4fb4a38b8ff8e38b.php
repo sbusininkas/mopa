@@ -815,9 +815,9 @@
                     <label for="classSelect">Pasirinkite klasę:</label>
                     <select id="classSelect" class="form-select">
                         <option value="">-- Pasirinkite klasę --</option>
-                        @foreach($classes as $class)
-                            <option value="{{ $class->id }}" data-class-name="{{ $class->name }}">{{ $class->name }}</option>
-                        @endforeach
+                        <?php $__currentLoopData = $classes; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $class): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                            <option value="<?php echo e($class->id); ?>" data-class-name="<?php echo e($class->name); ?>"><?php echo e($class->name); ?></option>
+                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                     </select>
                 </div>
                 <div class="filter-group">
@@ -918,7 +918,7 @@
     let selectedStudents = [];
     let currentClassStudents = [];
     let currentClassName = '';
-    const timetableId = {{ $timetable->id }};
+    const timetableId = <?php echo e($timetable->id); ?>;
 
     document.getElementById('classSelect').addEventListener('change', async function() {
         const classId = this.value;
@@ -928,7 +928,7 @@
         const studentSearch = document.getElementById('studentSearch');
         const timetableContainer = document.getElementById('timetableContainer');
         const viewClassBtn = document.getElementById('viewClassTimetableBtn');
-        const schoolId = {{ $school->id }};
+        const schoolId = <?php echo e($school->id); ?>;
 
         // Preserve previously selected students - don't clear them
         // selectedStudents array is kept intact
@@ -1319,8 +1319,8 @@
     function openGroupDetails(groupId) {
         if (!groupId) return;
         
-        const schoolId = {{ $school->id }};
-        const currentTimetableId = {{ $timetable->id }};
+        const schoolId = <?php echo e($school->id); ?>;
+        const currentTimetableId = <?php echo e($timetable->id); ?>;
         
         // Open group details page in new tab
         window.open(`/admin/schools/${schoolId}/timetables/${currentTimetableId}/groups/${groupId}/details`, '_blank');
@@ -1330,8 +1330,8 @@
     function openStudentTimetable(studentId, studentName) {
         if (!studentId) return;
         
-        const schoolId = {{ $school->id }};
-        const currentTimetableId = {{ $timetable->id }};
+        const schoolId = <?php echo e($school->id); ?>;
+        const currentTimetableId = <?php echo e($timetable->id); ?>;
         
         // Open student timetable page in new tab
         window.open(`/admin/schools/${schoolId}/timetables/${currentTimetableId}/student/${studentId}`, '_blank');
@@ -1341,8 +1341,8 @@
     function openRoomTimetable(roomId) {
         if (!roomId) return;
         
-        const schoolId = {{ $school->id }};
-        const currentTimetableId = {{ $timetable->id }};
+        const schoolId = <?php echo e($school->id); ?>;
+        const currentTimetableId = <?php echo e($timetable->id); ?>;
         
         // Open room timetable page in new tab
         window.open(`/admin/schools/${schoolId}/timetables/${currentTimetableId}/room/${roomId}`, '_blank');
@@ -1435,7 +1435,7 @@
     async function loadSelectedStudentsTimetables() {
         if (selectedStudents.length === 0) return;
         
-        const schoolId = {{ $school->id }};
+        const schoolId = <?php echo e($school->id); ?>;
         const gridContainer = document.getElementById('selectedStudentsTimetablesGrid');
         gridContainer.innerHTML = '<div class="text-center"><span class="spinner-border spinner-border-sm"></span> Kraunasi...</div>';
         
@@ -1708,8 +1708,8 @@
 
     // Cell interaction - show what lessons are at this time and allow adding groups
     function initializeCellInteractions() {
-        const schoolId = {{ $school->id }};
-        const timetableId = {{ $timetable->id }};
+        const schoolId = <?php echo e($school->id); ?>;
+        const timetableId = <?php echo e($timetable->id); ?>;
         
         document.querySelectorAll('.comparison-cell').forEach(cell => {
             cell.classList.add('timetable-cell-clickable');
@@ -1743,7 +1743,7 @@
             console.log('Card marked active');
         }
         
-        const timetableId = {{ $timetable->id }};
+        const timetableId = <?php echo e($timetable->id); ?>;
         console.log('Timetable ID:', timetableId);
         
         // Close any existing popups
@@ -1884,7 +1884,7 @@
         currentStudentCard.querySelectorAll('.preview-lesson-insert').forEach(el => el.remove());
         currentStudentCard.querySelectorAll('.preview-change').forEach(cell => cell.classList.remove('preview-change'));
         
-        const timetableId = {{ $timetable->id }};
+        const timetableId = <?php echo e($timetable->id); ?>;
         
         try {
             // Fetch all lessons for this group
@@ -1982,3 +1982,4 @@
 </script>
 
 
+<?php /**PATH C:\Users\herom\Desktop\Projektai\mopa\resources\views/admin/timetables/partials/class-timetable-review.blade.php ENDPATH**/ ?>

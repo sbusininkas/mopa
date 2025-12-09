@@ -125,18 +125,10 @@
         min-height: 80px;
         vertical-align: middle;
         background-color: #ffffff;
-        cursor: pointer;
-        transition: background-color 0.2s ease;
     }
     
     .timetable-cell:hover {
         background-color: #f8f9fa;
-    }
-    
-    .timetable-cell.highlighted {
-        background-color: #fff3cd;
-        border: 2px solid #ffc107;
-        box-shadow: inset 0 0 0 1px #ffc107;
     }
     
     .badge {
@@ -286,29 +278,6 @@ document.addEventListener('DOMContentLoaded', function(){
             
             trigger.addEventListener('mouseleave', removeTooltip);
             document.addEventListener('click', removeTooltip);
-        });
-    });
-
-    // Hover handler to highlight cells with same day/slot across timetables
-    const cells = document.querySelectorAll('.timetable-cell');
-    cells.forEach(cell => {
-        cell.addEventListener('mouseenter', function() {
-            const day = this.dataset.day;
-            const slot = this.dataset.slot;
-            
-            // Highlight all cells with same day and slot
-            if (day && slot) {
-                document.querySelectorAll(`.timetable-cell[data-day="${day}"][data-slot="${slot}"]`).forEach(c => {
-                    c.classList.add('highlighted');
-                });
-            }
-        });
-
-        cell.addEventListener('mouseleave', function() {
-            // Remove all highlights
-            document.querySelectorAll('.timetable-cell.highlighted').forEach(c => {
-                c.classList.remove('highlighted');
-            });
         });
     });
 });

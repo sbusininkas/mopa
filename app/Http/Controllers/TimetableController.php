@@ -4,8 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\School;
 use App\Models\Timetable;
-use App\Models\Room;
-use App\Models\TimetableSlot;
 use App\Jobs\GenerateTimetableJob;
 use Illuminate\Http\Request;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -61,7 +59,7 @@ class TimetableController extends Controller
         }
         abort_unless($timetable->school_id === $school->id, 404);
         
-        // Load classes for timetable review
+        // Get classes for this school
         $classes = $school->classes()->orderBy('name')->get();
         
         // Groups will be loaded via AJAX
@@ -1520,14 +1518,14 @@ class TimetableController extends Controller
         }
         abort_unless($timetable->school_id === $school->id && $room->school_id === $school->id, 404);
 
-        $days = ['Mon' => 'Pirmadienis', 'Tue' => 'Antradienis', 'Wed' => 'Trečiadienis', 'Thu' => 'Ketvirtadienis', 'Fri' => 'Penktadienis'];
+        $days = ['Monday' => 'Pirmadienis', 'Tuesday' => 'Antradienis', 'Wednesday' => 'Trečiadienis', 'Thursday' => 'Ketvirtadienis', 'Friday' => 'Penktadienis'];
 
         // Fetch all slots for this room
         $slots = TimetableSlot::where('timetable_id', $timetable->id)
             ->whereHas('group', function($q) use ($room) {
                 $q->where('room_id', $room->id);
             })
-            ->with(['group.subject', 'group.teacherLoginKey', 'group.room'])
+            ->with(['group.subject', 'group.teacher'])
             ->get();
 
         // Initialize grid by day and hour
@@ -1536,7 +1534,7 @@ class TimetableController extends Controller
         
         foreach ($slots as $slot) {
             $day = $slot->day;
-            $hour = (int)$slot->slot;
+            $hour = (int)$slot->hour;
             
             if (!isset($grid[$day])) {
                 $grid[$day] = [];
@@ -1544,8 +1542,8 @@ class TimetableController extends Controller
             
             $grid[$day][$hour] = [
                 'group' => $slot->group->name,
-                'subject' => $slot->group->subject?->name ?? '—',
-                'teacher_name' => $slot->group->teacherLoginKey?->full_name ?? '—',
+                'subject' => $slot->group->subject?->pavadinimas ?? '—',
+                'teacher_name' => $slot->group->teacher?->full_name ?? '—',
             ];
             
             if ($hour > $maxHour) {

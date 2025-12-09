@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="<?php echo e(str_replace('_', '-', app()->getLocale())); ?>">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -20,12 +20,12 @@
     <div class="container">
       <a class="navbar-brand fw-bold" href="#">MOPA</a>
       <div class="d-flex gap-2">
-        <a href="<?php echo e(route('schools.index')); ?>" class="btn btn-outline-primary"><i class="bi bi-building"></i> Mokyklos</a>
-        <?php if(session('active_school_id')): ?>
-          <a href="<?php echo e(route('schools.timetables.index', session('active_school_id'))); ?>" class="btn btn-primary"><i class="bi bi-calendar3"></i> Tvarkaraščiai</a>
-        <?php else: ?>
-          <a href="<?php echo e(route('schools.index')); ?>" class="btn btn-primary" title="Pirmiausia pasirinkite mokyklą"><i class="bi bi-calendar3"></i> Tvarkaraščiai</a>
-        <?php endif; ?>
+        <a href="{{ route('schools.index') }}" class="btn btn-outline-primary"><i class="bi bi-building"></i> Mokyklos</a>
+        @if(session('active_school_id'))
+          <a href="{{ route('schools.timetables.index', session('active_school_id')) }}" class="btn btn-primary"><i class="bi bi-calendar3"></i> Tvarkaraščiai</a>
+        @else
+          <a href="{{ route('schools.index') }}" class="btn btn-primary" title="Pirmiausia pasirinkite mokyklą"><i class="bi bi-calendar3"></i> Tvarkaraščiai</a>
+        @endif
       </div>
     </div>
   </nav>
@@ -40,12 +40,12 @@
           greitai aptikite konfliktus ir kurkite aiškius bei patogius tvarkaraščius.
         </p>
         <div class="d-flex justify-content-center gap-3" data-aos="zoom-in" data-aos-delay="200">
-          <a href="<?php echo e(route('schools.index')); ?>" class="btn btn-primary btn-lg"><i class="bi bi-building"></i> Mano mokyklos</a>
-          <?php if(session('active_school_id')): ?>
-            <a href="<?php echo e(route('schools.timetables.index', session('active_school_id'))); ?>" class="btn btn-outline-primary btn-lg"><i class="bi bi-calendar3"></i> Tvarkaraščiai</a>
-          <?php else: ?>
-            <a href="<?php echo e(route('schools.index')); ?>" class="btn btn-outline-primary btn-lg" title="Pirmiausia pasirinkite mokyklą"><i class="bi bi-calendar3"></i> Tvarkaraščiai</a>
-          <?php endif; ?>
+          <a href="{{ route('schools.index') }}" class="btn btn-primary btn-lg"><i class="bi bi-building"></i> Mano mokyklos</a>
+          @if(session('active_school_id'))
+            <a href="{{ route('schools.timetables.index', session('active_school_id')) }}" class="btn btn-outline-primary btn-lg"><i class="bi bi-calendar3"></i> Tvarkaraščiai</a>
+          @else
+            <a href="{{ route('schools.index') }}" class="btn btn-outline-primary btn-lg" title="Pirmiausia pasirinkite mokyklą"><i class="bi bi-calendar3"></i> Tvarkaraščiai</a>
+          @endif
         </div>
       </div>
     </section>
@@ -88,7 +88,7 @@
       <div class="container">
         <h3 class="fw-bold mb-3">Pradėkite šiandien</h3>
         <p class="text-muted mb-4">Prisijunkite arba pridėkite mokyklą, kad pradėtumėte tvarkaraščių kūrimą.</p>
-        <a href="<?php echo e(route('schools.index')); ?>" class="btn btn-gradient btn-lg"><i class="bi bi-rocket"></i> Pradėti</a>
+        <a href="{{ route('schools.index') }}" class="btn btn-gradient btn-lg"><i class="bi bi-rocket"></i> Pradėti</a>
       </div>
     </section>
   </main>
@@ -96,7 +96,7 @@
   <footer class="py-4 bg-white border-top">
     <div class="container text-center">
       <div class="fw-bold">MOPA</div>
-      <small class="text-muted">© <?php echo e(date('Y')); ?> MOPA. Visos teisės saugomos.</small>
+      <small class="text-muted">© {{ date('Y') }} MOPA. Visos teisės saugomos.</small>
     </div>
   </footer>
 
@@ -107,4 +107,3 @@
   </script>
 </body>
 </html>
-<?php /**PATH C:\Users\herom\Desktop\Projektai\mopa\resources\views/welcome.blade.php ENDPATH**/ ?>
