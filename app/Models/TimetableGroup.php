@@ -18,6 +18,8 @@ class TimetableGroup extends Model
         'lessons_per_week',
         'is_priority',
         'priority',
+        'can_merge_with_same_subject',
+        'merged_with_group_id',
     ];
     public function room(): BelongsTo
     {
@@ -48,6 +50,17 @@ class TimetableGroup extends Model
     public function students(): BelongsToMany
     {
         return $this->belongsToMany(LoginKey::class, 'timetable_group_student', 'timetable_group_id', 'login_key_id');
+    }
+
+    // Merge relationships
+    public function mergedWithGroup(): BelongsTo
+    {
+        return $this->belongsTo(TimetableGroup::class, 'merged_with_group_id');
+    }
+
+    public function mergedGroups()
+    {
+        return $this->hasMany(TimetableGroup::class, 'merged_with_group_id');
     }
 
     // Group copies relationships

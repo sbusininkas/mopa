@@ -37,6 +37,7 @@ class TimetableGroupController extends Controller
                 'week_type' => $group->week_type,
                 'lessons_per_week' => $group->lessons_per_week ?? 0,
                 'is_priority' => $group->is_priority ? true : false,
+                'can_merge_with_same_subject' => $group->can_merge_with_same_subject ? true : false,
                 'scheduled_count' => $scheduled,
                 'unscheduled_count' => $unscheduled,
                 'students_count' => $group->students->count(),
@@ -65,8 +66,10 @@ class TimetableGroupController extends Controller
             'week_type' => 'required|in:all,even,odd',
             'lessons_per_week' => 'required|integer|min:1|max:20',
             'is_priority' => 'nullable|boolean',
+            'can_merge_with_same_subject' => 'nullable|in:on,true,1',
         ]);
         $validated['is_priority'] = $request->has('is_priority');
+        $validated['can_merge_with_same_subject'] = $request->has('can_merge_with_same_subject') ? true : false;
 
         $group = $timetable->groups()->create($validated);
         return redirect()->back()->with('success', 'Grupė sukurta');
@@ -108,8 +111,10 @@ class TimetableGroupController extends Controller
             'is_priority' => 'nullable|in:on,true,1',
             'student_ids' => 'nullable|array',
             'student_ids.*' => 'exists:login_keys,id',
+            'can_merge_with_same_subject' => 'nullable|in:on,true,1',
         ]);
         $validated['is_priority'] = $request->has('is_priority') ? true : false;
+        $validated['can_merge_with_same_subject'] = $request->has('can_merge_with_same_subject') ? true : false;
         
         // Update group
         $group->update(collect($validated)->except(['student_ids'])->toArray());

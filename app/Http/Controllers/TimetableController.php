@@ -121,13 +121,13 @@ class TimetableController extends Controller
 
         // Initialize slots map from persisted TimetableSlot entries
         $persisted = $timetable->slots()->with(['group.subject', 'group.room', 'group.teacherLoginKey'])->get();
-        // Structure: [teacher_id][day_code][slot_index] => payload
+        // Structure: [teacher_id][day_code][slot_index] => array of payloads (support stacking)
         $slots = [];
         foreach ($teachers as $t) {
             $tid = $t->id;
             $slots[$tid] = [];
             foreach (array_keys($days) as $code) {
-                $slots[$tid][$code] = array_fill(1, $dayCaps[$code], null);
+                $slots[$tid][$code] = array_fill(1, $dayCaps[$code], []);
             }
         }
         foreach ($persisted as $ps) {
@@ -139,9 +139,9 @@ class TimetableController extends Controller
             if (!isset($slots[$tid][$dayCode][$slotIndex])) {
                 // ensure teacher and day are initialized even if no groups found
                 $slots[$tid] = $slots[$tid] ?? [];
-                $slots[$tid][$dayCode] = $slots[$tid][$dayCode] ?? array_fill(1, $dayCaps[$dayCode] ?? 9, null);
+                $slots[$tid][$dayCode] = $slots[$tid][$dayCode] ?? array_fill(1, $dayCaps[$dayCode] ?? 9, []);
             }
-            $slots[$tid][$dayCode][$slotIndex] = [
+            $slots[$tid][$dayCode][$slotIndex][] = [
                 'slot_id' => $ps->id,
                 'group_id' => $g->id,
                 'group' => $g->name,
@@ -151,6 +151,7 @@ class TimetableController extends Controller
                 'teacher_id' => $tid,
                 'teacher_name' => $g->teacherLoginKey?->full_name,
                 'student_count' => $g->students()->count(),
+                'can_merge' => (bool)$g->can_merge_with_same_subject,
             ];
         }
 
@@ -473,6 +474,7 @@ class TimetableController extends Controller
             'day' => 'required|string',
             'slot' => 'required|integer|min:1',
             'teacher_id' => 'required|integer',
+            'merge' => 'nullable|boolean',
         ]);
         $group = $timetable->groups()->with(['subject','teacherLoginKey','students','room'])->find($validated['group_id']);
         if (!$group) { return response()->json(['error' => 'Grupė nerasta'], 404); }
@@ -487,12 +489,19 @@ class TimetableController extends Controller
         }
         $day = $validated['day'];
         $slot = (int)$validated['slot'];
+        $isMerge = $validated['merge'] ?? false;
+        
         // Conflict checks (teacher, room, students per same day+slot)
         $existing = $timetable->slots()->where('day',$day)->where('slot',$slot)->with(['group.teacherLoginKey','group.room','group.students','group.subject'])->get();
         foreach ($existing as $ex) {
             $eg = $ex->group;
+            // Allow teacher occupied only if merging with same subject and both groups allow merging
             if ($eg && $eg->teacher_login_key_id === $group->teacher_login_key_id) {
-                return response()->json(['error' => 'Mokytojas tuo laiku užimtas'], 422);
+                $subjectsMatch = ($eg->subject?->id) && ($group->subject_id) && ($eg->subject->id === $group->subject_id);
+                $bothAllowMerge = ($eg->can_merge_with_same_subject ?? false) && ($group->can_merge_with_same_subject ?? false);
+                if (!$isMerge || !$subjectsMatch || !$bothAllowMerge) {
+                    return response()->json(['error' => 'Mokytojas tuo laiku užimtas'], 422);
+                }
             }
             if ($eg && $group->room_id && $eg->room_id === $group->room_id) {
                 $roomName = $group->room ? ($group->room->number . ' ' . $group->room->name) : 'Kabinetas';
@@ -558,7 +567,8 @@ class TimetableController extends Controller
                         $conflictingStudents[] = $st->full_name . ' (' . $eg->name . ')';
                     }
                 }
-                if (!empty($conflictingStudents)) {
+                // Allow student overlap only under merge scenario
+                if (!empty($conflictingStudents) && !$isMerge) {
                     return response()->json([
                         'error' => 'Užimti mokiniai: ' . implode(', ', $conflictingStudents)
                     ], 422);
@@ -602,6 +612,18 @@ class TimetableController extends Controller
         $scheduledCount = $timetable->slots()->where('timetable_group_id', $group->id)->count();
         $remainingLessons = max(0, ($group->lessons_per_week ?? 0) - $scheduledCount);
         
+        // Build tooltip HTML
+        $dayLabel = ['Mon' => 'Pirmadienis', 'Tue' => 'Antradienis', 'Wed' => 'Trečiadienis', 'Thu' => 'Ketvirtadienis', 'Fri' => 'Penktadienis'][$day] ?? $day;
+        $tooltipHtml = '<div class="tt-inner">'
+            .'<div class="tt-row tt-row-head"><i class="bi bi-clock-history tt-ico"></i><span class="tt-val">'.e($dayLabel).' • '.e($slot).' pamoka</span></div>'
+            .'<div class="tt-divider"></div>'
+            .'<div class="tt-row"><i class="bi bi-collection-fill tt-ico"></i><span class="tt-val">'.e($group->name).'</span></div>'
+            .'<div class="tt-row"><i class="bi bi-book-half tt-ico"></i><span class="tt-val">'.e($group->subject?->name ?? '—').'</span></div>'
+            .'<div class="tt-row"><i class="bi bi-door-closed tt-ico"></i><span class="tt-val">'.e($group->room?->number ? ($group->room->number . ' ' . $group->room->name) : '—').'</span></div>'
+            .'<div class="tt-row"><i class="bi bi-person-badge tt-ico"></i><span class="tt-val">'.e($group->teacherLoginKey?->full_name ?? '—').'</span></div>'
+        .'</div>';
+        $tooltipB64 = base64_encode($tooltipHtml);
+        
         return response()->json([
             'success' => true,
             'html' => [
@@ -612,6 +634,7 @@ class TimetableController extends Controller
                 'slot_id' => $slotModel->id,
                 'teacher_id' => $group->teacherLoginKey?->id,
                 'teacher_name' => $group->teacherLoginKey?->full_name,
+                'tooltip_b64' => $tooltipB64,
             ],
             'group_id' => $group->id,
             'remaining_lessons' => $remainingLessons,

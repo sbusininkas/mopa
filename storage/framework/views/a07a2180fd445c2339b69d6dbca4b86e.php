@@ -5,7 +5,7 @@ async function loadGroups() {
     const loader = document.getElementById('groupsLoader');
     
     try {
-        const response = await fetch('{{ route("schools.timetables.groups.list", [$school, $timetable]) }}', {
+        const response = await fetch('<?php echo e(route("schools.timetables.groups.list", [$school, $timetable])); ?>', {
             headers: { 'Accept': 'application/json' }
         });
         const ct = response.headers.get('content-type') || '';
@@ -78,7 +78,7 @@ function renderGroupHTML(group) {
     const weekTypeLabel = group.week_type === 'all' ? 'Kiekv. savaitė' : (group.week_type === 'even' ? 'Lyginės' : 'Nelyginės');
     const roomBadge = group.room_number ? `<span class="badge bg-dark">${group.room_number} ${group.room_name || ''}</span>` : '';
     const priorityBadge = group.is_priority ? `<span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> Prioritetinė</span>` : '';
-    const groupDetailsUrl = `{{ route('schools.timetables.groups.details', [$school, $timetable, ':groupId']) }}`.replace(':groupId', group.id);
+    const groupDetailsUrl = `<?php echo e(route('schools.timetables.groups.details', [$school, $timetable, ':groupId'])); ?>`.replace(':groupId', group.id);
     
     return `
         <div class="modern-card mb-2" id="group${group.id}">
@@ -99,8 +99,8 @@ function renderGroupHTML(group) {
             </div>
             <div class="collapse" id="groupCollapse${group.id}">
                 <div class="card-body border-top">
-                    <form method="POST" class="assign-form" action="${'{{ route('schools.timetables.groups.assign-students', [$school, $timetable, ':groupId']) }}'.replace(':groupId', group.id)}">
-                        @csrf
+                    <form method="POST" class="assign-form" action="${'<?php echo e(route('schools.timetables.groups.assign-students', [$school, $timetable, ':groupId'])); ?>'.replace(':groupId', group.id)}">
+                        <?php echo csrf_field(); ?>
                         <div class="row">
                             <div class="col-md-5">
                                 <label class="form-label">Ieškoti mokinių</label>
@@ -109,9 +109,9 @@ function renderGroupHTML(group) {
                                     <label class="form-label text-muted small">arba pasirinkite klasę</label>
                                     <select id="classSelect${group.id}" class="form-select">
                                         <option value="">-- Pasirinkite klasę --</option>
-                                        @foreach($school->classes as $class)
-                                            <option value="{{ $class->id }}">{{ $class->name }}</option>
-                                        @endforeach
+                                        <?php $__currentLoopData = $school->classes; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $class): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                            <option value="<?php echo e($class->id); ?>"><?php echo e($class->name); ?></option>
+                                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                     </select>
                                 </div>
                                 <div class="mt-2 d-flex align-items-center gap-2">
@@ -167,10 +167,10 @@ function renderGroupHTML(group) {
                         <h5 class="modal-title"><i class="bi bi-pencil"></i> Redaguoti grupę</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
-                    <form method="POST" action="{{ route('schools.timetables.groups.update', [$school, $timetable, ':groupId']) }}".replace(':groupId', '${group.id}')>
+                    <form method="POST" action="<?php echo e(route('schools.timetables.groups.update', [$school, $timetable, ':groupId'])); ?>".replace(':groupId', '${group.id}')>
                         <div class="modal-body">
-                            @csrf
-                            @method('PUT')
+                            <?php echo csrf_field(); ?>
+                            <?php echo method_field('PUT'); ?>
                             <div class="mb-3">
                                 <label class="form-label">Pavadinimas</label>
                                 <input type="text" name="name" class="form-control" value="${group.name}" required>
@@ -179,27 +179,27 @@ function renderGroupHTML(group) {
                                 <label class="form-label">Dalykas</label>
                                 <select name="subject_id" class="form-select">
                                     <option value="">-- Pasirinkite --</option>
-                                    @foreach($school->subjects as $subject)
-                                        <option value="{{ $subject->id }}">${group.subject_id === {{ $subject->id }} ? 'selected' : ''}>{{ $subject->name }}</option>
-                                    @endforeach
+                                    <?php $__currentLoopData = $school->subjects; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $subject): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                        <option value="<?php echo e($subject->id); ?>">${group.subject_id === <?php echo e($subject->id); ?> ? 'selected' : ''}><?php echo e($subject->name); ?></option>
+                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                 </select>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Mokytojas</label>
                                 <select name="teacher_login_key_id" class="form-select">
                                     <option value="">-- Pasirinkite --</option>
-                                    @foreach($school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->orderBy('first_name')->get() as $teacher)
-                                        <option value="{{ $teacher->id }}">${group.teacher_login_key_id === {{ $teacher->id }} ? 'selected' : ''}>{{ $teacher->full_name }}</option>
-                                    @endforeach
+                                    <?php $__currentLoopData = $school->loginKeys()->where('type', 'teacher')->orderBy('last_name')->orderBy('first_name')->get(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $teacher): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                        <option value="<?php echo e($teacher->id); ?>">${group.teacher_login_key_id === <?php echo e($teacher->id); ?> ? 'selected' : ''}><?php echo e($teacher->full_name); ?></option>
+                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                 </select>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Kabinetas</label>
                                 <select name="room_id" class="form-select">
                                     <option value="">-- Pasirinkite --</option>
-                                    @foreach($school->rooms as $room)
-                                        <option value="{{ $room->id }}">${group.room_id === {{ $room->id }} ? 'selected' : ''}>{{ $room->number }} {{ $room->name }}</option>
-                                    @endforeach
+                                    <?php $__currentLoopData = $school->rooms; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $room): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                        <option value="<?php echo e($room->id); ?>">${group.room_id === <?php echo e($room->id); ?> ? 'selected' : ''}><?php echo e($room->number); ?> <?php echo e($room->name); ?></option>
+                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                 </select>
                             </div>
                             <div class="mb-3">
@@ -242,10 +242,10 @@ function renderGroupHTML(group) {
                         <h5 class="modal-title"><i class="bi bi-trash"></i> Pašalinti grupę</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
-                    <form method="POST" action="{{ route('schools.timetables.groups.destroy', [$school, $timetable, ':groupId']) }}".replace(':groupId', '${group.id}')>
+                    <form method="POST" action="<?php echo e(route('schools.timetables.groups.destroy', [$school, $timetable, ':groupId'])); ?>".replace(':groupId', '${group.id}')>
                         <div class="modal-body">
-                            @csrf
-                            @method('DELETE')
+                            <?php echo csrf_field(); ?>
+                            <?php echo method_field('DELETE'); ?>
                             <p>Ar tikrai norite pašalinti grupę <strong>${group.name}</strong>?</p>
                             <p class="text-danger small">Veiksmas negrįžtamas!</p>
                         </div>
@@ -281,7 +281,7 @@ async function loadUnscheduledLessons() {
     }
     
     try {
-        const response = await fetch('{{ route("schools.timetables.unscheduled-html", [$school, $timetable]) }}');
+        const response = await fetch('<?php echo e(route("schools.timetables.unscheduled-html", [$school, $timetable])); ?>');
         
         if (!response.ok) {
             throw new Error('HTTP ' + response.status);
@@ -395,13 +395,13 @@ function copyUnscheduledGroup(groupId, unscheduledCount) {
         return;
     }
 
-    const url = '{{ route("schools.timetables.groups.copy-unscheduled", [$school, $timetable, ":groupId"]) }}'.replace(':groupId', groupId);
+    const url = '<?php echo e(route("schools.timetables.groups.copy-unscheduled", [$school, $timetable, ":groupId"])); ?>'.replace(':groupId', groupId);
     
     fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            'X-CSRF-TOKEN': '<?php echo e(csrf_token()); ?>'
         },
         body: JSON.stringify({
             unscheduled_count: unscheduledCount
@@ -440,7 +440,7 @@ function loadAllStudentsUnsch(groupId) {
     // Get current assigned IDs from DOM
     const currentAssignedIds = getCurrentAssignedIds(groupId);
     
-    fetch(`{{ url('/admin/api/schools') }}/{{ $school->id }}/students`)
+    fetch(`<?php echo e(url('/admin/api/schools')); ?>/<?php echo e($school->id); ?>/students`)
         .then(res => res.json())
         .then(json => {
             const items = json.data || [];
@@ -600,63 +600,63 @@ window.unassignStudentUnsch = function(groupId, studentId) {
 
 // Load students when edit modal opens
 document.addEventListener('DOMContentLoaded', function() {
-    @foreach(($timetable->generation_report['unscheduled'] ?? []) as $item)
-        const editModal{{ $item['group_id'] }} = document.getElementById('editUnscheduledGroup{{ $item['group_id'] }}');
-        const searchInput{{ $item['group_id'] }} = document.getElementById('studentSearchUnsch{{ $item['group_id'] }}');
-        let searchTimeout{{ $item['group_id'] }} = null;
-        let currentAssignedIds{{ $item['group_id'] }} = [];
+    <?php $__currentLoopData = ($timetable->generation_report['unscheduled'] ?? []); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $item): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+        const editModal<?php echo e($item['group_id']); ?> = document.getElementById('editUnscheduledGroup<?php echo e($item['group_id']); ?>');
+        const searchInput<?php echo e($item['group_id']); ?> = document.getElementById('studentSearchUnsch<?php echo e($item['group_id']); ?>');
+        let searchTimeout<?php echo e($item['group_id']); ?> = null;
+        let currentAssignedIds<?php echo e($item['group_id']); ?> = [];
         
         // Search functionality
-        if (searchInput{{ $item['group_id'] }}) {
-            searchInput{{ $item['group_id'] }}.addEventListener('input', function() {
-                clearTimeout(searchTimeout{{ $item['group_id'] }});
+        if (searchInput<?php echo e($item['group_id']); ?>) {
+            searchInput<?php echo e($item['group_id']); ?>.addEventListener('input', function() {
+                clearTimeout(searchTimeout<?php echo e($item['group_id']); ?>);
                 const query = this.value.trim();
                 
                 if (query.length < 2) {
-                    document.getElementById('studentsListUnsch{{ $item['group_id'] }}').innerHTML = 
+                    document.getElementById('studentsListUnsch<?php echo e($item['group_id']); ?>').innerHTML = 
                         '<p class="text-muted small">Įveskite bent 2 simbolius...</p>';
                     return;
                 }
                 
-                searchTimeout{{ $item['group_id'] }} = setTimeout(() => {
-                    fetch(`{{ url('/admin/api/schools') }}/{{ $school->id }}/students/search?q=${encodeURIComponent(query)}`)
+                searchTimeout<?php echo e($item['group_id']); ?> = setTimeout(() => {
+                    fetch(`<?php echo e(url('/admin/api/schools')); ?>/<?php echo e($school->id); ?>/students/search?q=${encodeURIComponent(query)}`)
                         .then(res => res.json())
                         .then(json => {
                             const items = json.data || [];
                             // Use getCurrentAssignedIds to read actual DOM state
-                            const currentIds = getCurrentAssignedIds({{ $item['group_id'] }});
-                            renderStudentsUnschWithAssigned({{ $item['group_id'] }}, items, currentIds);
+                            const currentIds = getCurrentAssignedIds(<?php echo e($item['group_id']); ?>);
+                            renderStudentsUnschWithAssigned(<?php echo e($item['group_id']); ?>, items, currentIds);
                         })
                         .catch(e => {
-                            document.getElementById('studentsListUnsch{{ $item['group_id'] }}').innerHTML = 
+                            document.getElementById('studentsListUnsch<?php echo e($item['group_id']); ?>').innerHTML = 
                                 '<div class="alert alert-danger small">Klaida ieškant</div>';
                         });
                 }, 300);
             });
         }
         
-        if (editModal{{ $item['group_id'] }}) {
-            editModal{{ $item['group_id'] }}.addEventListener('shown.bs.modal', function() {
+        if (editModal<?php echo e($item['group_id']); ?>) {
+            editModal<?php echo e($item['group_id']); ?>.addEventListener('shown.bs.modal', function() {
                 // Load group's current students
-                fetch('{{ route("schools.timetables.groups.students", [$school, $timetable, $item["group_id"]]) }}')
+                fetch('<?php echo e(route("schools.timetables.groups.students", [$school, $timetable, $item["group_id"]])); ?>')
                     .then(res => res.json())
                     .then(data => {
-                        currentAssignedIds{{ $item['group_id'] }} = (data.students || []).map(s => s.id);
+                        currentAssignedIds<?php echo e($item['group_id']); ?> = (data.students || []).map(s => s.id);
                         
                         // Load all students
-                        return fetch(`{{ url('/admin/api/schools') }}/{{ $school->id }}/students`)
+                        return fetch(`<?php echo e(url('/admin/api/schools')); ?>/<?php echo e($school->id); ?>/students`)
                             .then(res => res.json())
                             .then(json => {
                                 const allStudents = json.data || [];
-                                renderStudentsUnschWithAssigned({{ $item['group_id'] }}, allStudents, currentAssignedIds{{ $item['group_id'] }});
+                                renderStudentsUnschWithAssigned(<?php echo e($item['group_id']); ?>, allStudents, currentAssignedIds<?php echo e($item['group_id']); ?>);
 
                                 // Bind checkbox change handler once to keep counter in sync
-                                const listEl = document.getElementById('assignedStudentsListUnsch' + {{ $item['group_id'] }});
+                                const listEl = document.getElementById('assignedStudentsListUnsch' + <?php echo e($item['group_id']); ?>);
                                 if (listEl && !listEl.dataset.changeBound) {
                                     listEl.addEventListener('change', (ev) => {
                                         if (ev.target && ev.target.classList.contains('assigned-checkbox')) {
                                             const cnt = listEl.querySelectorAll('input.assigned-checkbox:checked').length;
-                                            const cntEl = document.getElementById('assignedCountUnsch' + {{ $item['group_id'] }});
+                                            const cntEl = document.getElementById('assignedCountUnsch' + <?php echo e($item['group_id']); ?>);
                                             if (cntEl) cntEl.textContent = cnt;
                                         }
                                     });
@@ -664,7 +664,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 }
 
                                 // Bind assigned search input to filter right panel independently
-                                const assignedSearchEl = document.getElementById('assignedSearchUnsch' + {{ $item['group_id'] }});
+                                const assignedSearchEl = document.getElementById('assignedSearchUnsch' + <?php echo e($item['group_id']); ?>);
                                 if (assignedSearchEl && !assignedSearchEl.dataset.bound) {
                                     assignedSearchEl.addEventListener('input', () => {
                                         const q = (assignedSearchEl.value || '').toLowerCase();
@@ -680,12 +680,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     })
                     .catch(e => {
                         console.error('Error loading students:', e);
-                        document.getElementById('studentsListUnsch{{ $item['group_id'] }}').innerHTML = 
+                        document.getElementById('studentsListUnsch<?php echo e($item['group_id']); ?>').innerHTML = 
                             '<div class="alert alert-danger small">Klaida kraunant mokinius</div>';
                     });
             });
         }
-    @endforeach
+    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
 });
 
 function saveUnscheduledGroup(groupId) {
@@ -708,13 +708,13 @@ function saveUnscheduledGroup(groupId) {
         student_ids: studentIds
     };
     
-    const url = '{{ route("schools.timetables.groups.update", [$school, $timetable, ":groupId"]) }}'.replace(':groupId', groupId);
+    const url = '<?php echo e(route("schools.timetables.groups.update", [$school, $timetable, ":groupId"])); ?>'.replace(':groupId', groupId);
     
     fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'X-CSRF-TOKEN': '<?php echo e(csrf_token()); ?>',
             'Accept': 'application/json'
         },
         body: JSON.stringify(data)
@@ -741,13 +741,13 @@ function saveUnscheduledGroup(groupId) {
 }
 
 function confirmCopyGroup(groupId, unscheduledCount) {
-    const url = '{{ route("schools.timetables.groups.copy-unscheduled", [$school, $timetable, ":groupId"]) }}'.replace(':groupId', groupId);
+    const url = '<?php echo e(route("schools.timetables.groups.copy-unscheduled", [$school, $timetable, ":groupId"])); ?>'.replace(':groupId', groupId);
     
     fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            'X-CSRF-TOKEN': '<?php echo e(csrf_token()); ?>'
         },
         body: JSON.stringify({
             unscheduled_count: unscheduledCount
@@ -795,13 +795,13 @@ function confirmCopyGroupWithData(groupId, unscheduledCount) {
         unscheduled_count: unscheduledCount
     };
     
-    const url = '{{ route("schools.timetables.groups.copy-unscheduled", [$school, $timetable, ":groupId"]) }}'.replace(':groupId', groupId);
+    const url = '<?php echo e(route("schools.timetables.groups.copy-unscheduled", [$school, $timetable, ":groupId"])); ?>'.replace(':groupId', groupId);
     
     fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            'X-CSRF-TOKEN': '<?php echo e(csrf_token()); ?>'
         },
         body: JSON.stringify(data)
     })
@@ -934,7 +934,7 @@ function initializeGroupListeners(groupId) {
             searchTimeout = setTimeout(async () => {
                 try {
                     studentsList.innerHTML = '<div class="d-flex align-items-center gap-2 text-muted small"><span class="spinner-border spinner-border-sm"></span> Ieškoma...</div>';
-                    const res = await fetch(`{{ url('/admin/api/schools') }}/{{ $school->id }}/students/search?q=${encodeURIComponent(query)}`);
+                    const res = await fetch(`<?php echo e(url('/admin/api/schools')); ?>/<?php echo e($school->id); ?>/students/search?q=${encodeURIComponent(query)}`);
                     if (!res.ok) throw new Error('HTTP ' + res.status);
                     const json = await res.json();
                     const items = (json.data || []);
@@ -961,7 +961,7 @@ function initializeGroupListeners(groupId) {
             try {
                 classSelect.disabled = true;
                 studentsList.innerHTML = '<div class="d-flex align-items-center gap-2 text-muted small"><span class="spinner-border spinner-border-sm"></span> Kraunama...</div>';
-                const res = await fetch(`{{ url('/admin/api/classes') }}/${classId}/students`);
+                const res = await fetch(`<?php echo e(url('/admin/api/classes')); ?>/${classId}/students`);
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const json = await res.json();
                 const items = (json.data || []);
@@ -1042,7 +1042,7 @@ function initializeGroupListeners(groupId) {
         }
     }
 </script>
-@push('scripts')
+<?php $__env->startPush('scripts'); ?>
 <script>
 // Flash message function
 function showFlashMessage(msg, type = 'success') {
@@ -1071,7 +1071,7 @@ function startGenerationPolling() {
     const progressBar = document.getElementById('generationProgressBar');
     if (!progressBar) return;
     const poll = setInterval(() => {
-        fetch('{{ route('timetables.generation-status', $timetable) }}')
+        fetch('<?php echo e(route('timetables.generation-status', $timetable)); ?>')
             .then(r => r.json())
             .then(data => {
                 if (data.progress != null) {
@@ -1088,9 +1088,9 @@ function startGenerationPolling() {
             .catch(e => console.error(e));
     }, 1500);
 }
-@if($timetable->generation_status==='running')
+<?php if($timetable->generation_status==='running'): ?>
 startGenerationPolling();
-@endif
+<?php endif; ?>
 
 document.getElementById('generateForm')?.addEventListener('submit', function() {
     // After submission, create dynamic progress UI if not present
@@ -1143,7 +1143,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function loadTeachersWorkingDays() {
         const listContainer = document.getElementById('teachersWorkingDaysList');
         
-        fetch('{{ route('schools.timetables.all-teachers-working-days', [$school, $timetable]) }}')
+        fetch('<?php echo e(route('schools.timetables.all-teachers-working-days', [$school, $timetable])); ?>')
             .then(r => r.json())
             .then(data => {
                 teachersData = data;
@@ -1272,11 +1272,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        fetch('{{ route('schools.timetables.update-teacher-working-days', [$school, $timetable]) }}', {
+        fetch('<?php echo e(route('schools.timetables.update-teacher-working-days', [$school, $timetable])); ?>', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                'X-CSRF-TOKEN': '<?php echo e(csrf_token()); ?>'
             },
             body: JSON.stringify({
                 teacher_id: teacherId,
@@ -1336,4 +1336,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
-@endpush
+<?php $__env->stopPush(); ?>
+<?php /**PATH C:\xampp\htdocs\mopa\resources\views/admin/timetables/partials/scripts.blade.php ENDPATH**/ ?>
