@@ -3,8 +3,8 @@
         <i class="bi bi-plus-circle"></i> Sukurti naują grupę
     </div>
     <div class="card-body">
-        <form method="POST" action="{{ route('schools.timetables.groups.store', [$school, $timetable]) }}" class="row g-3">
-            @csrf
+        <form method="POST" action="<?php echo e(route('schools.timetables.groups.store', [$school, $timetable])); ?>" class="row g-3">
+            <?php echo csrf_field(); ?>
             <div class="col-md-3">
                 <label class="form-label">Grupės pavadinimas *</label>
                 <input type="text" name="name" class="form-control" required>
@@ -13,27 +13,27 @@
                 <label class="form-label">Dalykas</label>
                 <select name="subject_id" class="form-select">
                     <option value="">-- Nepasirinkta --</option>
-                    @foreach($school->subjects as $subject)
-                        <option value="{{ $subject->id }}">{{ $subject->name }}</option>
-                    @endforeach
+                    <?php $__currentLoopData = $school->subjects; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $subject): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                        <option value="<?php echo e($subject->id); ?>"><?php echo e($subject->name); ?></option>
+                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                 </select>
             </div>
             <div class="col-md-2">
                 <label class="form-label">Mokytojas</label>
                 <select name="teacher_login_key_id" class="form-select">
                     <option value="">-- Nepasirinkta --</option>
-                    @foreach($school->loginKeys()->where('type','teacher')->orderBy('last_name')->orderBy('first_name')->get() as $teacher)
-                        <option value="{{ $teacher->id }}">{{ $teacher->full_name }}</option>
-                    @endforeach
+                    <?php $__currentLoopData = $school->loginKeys()->where('type','teacher')->orderBy('last_name')->orderBy('first_name')->get(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $teacher): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                        <option value="<?php echo e($teacher->id); ?>"><?php echo e($teacher->full_name); ?></option>
+                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                 </select>
             </div>
             <div class="col-md-2">
                 <label class="form-label">Kabinetas</label>
                 <select name="room_id" class="form-select">
                     <option value="">-- Nepasirinkta --</option>
-                    @foreach($school->rooms as $room)
-                        <option value="{{ $room->id }}">{{ $room->number }} {{ $room->name }}</option>
-                    @endforeach
+                    <?php $__currentLoopData = $school->rooms; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $room): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                        <option value="<?php echo e($room->id); ?>"><?php echo e($room->number); ?> <?php echo e($room->name); ?></option>
+                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                 </select>
             </div>
             <div class="col-md-1">
@@ -70,3 +70,4 @@
         </form>
     </div>
 </div>
+<?php /**PATH C:\xampp\htdocs\mopa\resources\views/admin/timetables/partials/group-create-form.blade.php ENDPATH**/ ?>
