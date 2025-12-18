@@ -109,6 +109,26 @@ class ActiveSchoolController extends Controller
     }
 
     /**
+     * Update lesson times
+     */
+    public function updateLessonTimes(Request $request)
+    {
+        $school = $this->getSchool($request);
+        
+        $validated = $request->validate([
+            'lesson_times' => 'required|array',
+            'lesson_times.*.slot' => 'required|integer|min:1',
+            'lesson_times.*.start' => 'required|date_format:H:i',
+            'lesson_times.*.end' => 'required|date_format:H:i',
+        ]);
+        
+        $school->lesson_times = $validated['lesson_times'];
+        $school->save();
+        
+        return redirect()->route('school.settings')->with('success', 'Pamokų laikai sėkmingai atnaujinti');
+    }
+
+    /**
      * Show contacts page with active school
      */
     public function contacts(Request $request)

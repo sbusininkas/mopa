@@ -7,10 +7,7 @@
     </div>
     <div id="teacherWorkingDaysCollapse" class="collapse">
         <div class="card-body">
-            <p class="text-muted small mb-3">
-                <i class="bi bi-info-circle"></i> Čia galite nustatyti, kuriomis dienomis kiekvienas mokytojas dirba šiame tvarkaraštyje. 
-                Jei nepažymėta nė viena diena, laikoma, kad mokytojas dirba visas dienas.
-            </p>
+
             <p class="text-muted small mb-3">
                 <i class="bi bi-slash-circle"></i> Taip pat galite nurodyti laikus (pamokų intervalus), kai mokytojas NEGALI dirbti.
             </p>

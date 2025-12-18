@@ -1,0 +1,1 @@
+{"days":["Mon"],"day_caps":{"Mon":5},"groups":[{"id":1,"lessons_per_week":2,"teacher_id":10,"room_id":5,"subject_id":3,"priority":5,"can_merge":false,"student_ids":[1,2,3]}],"teacher_unavailability":{},"max_same_subject_per_day":2,"max_time_seconds":5,"num_workers":4}

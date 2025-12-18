@@ -1352,10 +1352,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     const m = bootstrap.Modal.getInstance(root);
                     if (m) m.hide();
                 } else {
-                    alert(data.error || 'Nepavyko išsaugoti');
+                        showErrorModal(data.error || 'Nepavyko išsaugoti');
                 }
             })
-            .catch(() => alert('Nepavyko išsaugoti'));
+                .catch(() => showErrorModal('Nepavyko išsaugoti'));
         });
 
         root.addEventListener('hidden.bs.modal', function(){ this.remove(); });
@@ -1413,6 +1413,38 @@ document.addEventListener('DOMContentLoaded', function() {
             this.closest('.position-fixed').remove();
         });
     }
+
+        function showErrorModal(message) {
+            const modalHtml = `
+                <div class="modal fade" id="errorAlertModal" tabindex="-1">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header bg-danger text-white">
+                                <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Klaida</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                ${message}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Gerai</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        
+            const existing = document.getElementById('errorAlertModal');
+            if (existing) existing.remove();
+        
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = new bootstrap.Modal(document.getElementById('errorAlertModal'));
+            modal.show();
+        
+            document.getElementById('errorAlertModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
+        }
 });
 </script>
 <?php $__env->stopPush(); ?>

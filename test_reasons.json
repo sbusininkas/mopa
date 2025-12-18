@@ -1,0 +1,14 @@
+{
+  "days": ["Mon", "Tue"],
+  "day_caps": {"Mon": 3, "Tue": 3},
+  "groups": [
+    {"id": 1, "lessons_per_week": 5, "teacher_id": 100, "room_id": 1, "subject_id": 10, "priority": 5, "can_merge": false, "student_ids": [1,2,3]},
+    {"id": 2, "lessons_per_week": 3, "teacher_id": 100, "room_id": 1, "subject_id": 11, "priority": 3, "can_merge": false, "student_ids": [1,2,3]}
+  ],
+  "teacher_unavailability": {
+    "100": {"Mon": [["08:00", "10:00"]]}
+  },
+  "max_same_subject_per_day": 2,
+  "max_time_seconds": 5,
+  "num_workers": 4
+}

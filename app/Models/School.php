@@ -15,11 +15,43 @@ class School extends Model
         'address',
         'phone',
         'admin_key',
+        'lesson_times',
     ];
 
     protected $hidden = [
         'admin_key',
     ];
+
+    protected $casts = [
+        'lesson_times' => 'array',
+    ];
+    
+    /**
+     * Get default lesson times
+     */
+    public static function getDefaultLessonTimes(): array
+    {
+        return [
+            ['slot' => 1, 'start' => '08:00', 'end' => '08:45'],
+            ['slot' => 2, 'start' => '08:55', 'end' => '09:40'],
+            ['slot' => 3, 'start' => '09:50', 'end' => '10:35'],
+            ['slot' => 4, 'start' => '11:05', 'end' => '11:50'],
+            ['slot' => 5, 'start' => '12:15', 'end' => '13:00'],
+            ['slot' => 6, 'start' => '13:10', 'end' => '13:55'],
+            ['slot' => 7, 'start' => '14:05', 'end' => '14:50'],
+            ['slot' => 8, 'start' => '14:55', 'end' => '15:40'],
+            ['slot' => 9, 'start' => '15:45', 'end' => '16:30'],
+        ];
+    }
+    
+    /**
+     * Get lesson times (with defaults if not set)
+     */
+    public function getLessonTimesAttribute($value): array
+    {
+        $times = $value ? json_decode($value, true) : null;
+        return $times ?: self::getDefaultLessonTimes();
+    }
 
     /**
      * Boot the model.

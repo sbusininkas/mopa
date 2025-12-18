@@ -198,5 +198,6 @@ Route::middleware(['auth', 'active.school'])->group(function () {
     
     // Settings
     Route::get('/school/settings', [\App\Http\Controllers\ActiveSchoolController::class, 'settings'])->name('school.settings');
+    Route::post('/school/settings/lesson-times', [\App\Http\Controllers\ActiveSchoolController::class, 'updateLessonTimes'])->name('school.settings.lesson-times');
     Route::get('/school/contacts', [\App\Http\Controllers\ActiveSchoolController::class, 'contacts'])->name('school.contacts');
 });

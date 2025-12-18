@@ -506,10 +506,6 @@
         </div>
         <div id="teacherWorkingDaysCollapse" class="collapse">
             <div class="card-body">
-                <p class="text-muted small mb-3">
-                    <i class="bi bi-info-circle"></i> Čia galite nustatyti, kuriomis dienomis kiekvienas mokytojas dirba šiame tvarkaraštyje. 
-                    Jei nepažymėta nė viena diena, laikoma, kad mokytojas dirba visas dienas.
-                </p>
                 <div id="teachersWorkingDaysList">
                     <div class="text-center py-3">
                         <div class="spinner-border text-primary" role="status">

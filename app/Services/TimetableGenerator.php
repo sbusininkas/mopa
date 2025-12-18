@@ -4,14 +4,11 @@ namespace App\Services;
 
 use App\Models\Timetable;
 use App\Models\TimetableGroup;
-use App\Models\Teacher; // If exists
-use App\Models\Room; // If exists
-use Illuminate\Support\Arr;
 
 class TimetableGenerator
 {
     /**
-     * Generate timetable with simple greedy heuristic.
+     * Generate timetable using Python OR-Tools constraint solver.
      * Accepts a progress callback receiving integer percent (0..100).
      */
     public function generate(Timetable $timetable, ?callable $progressCallback = null): array
@@ -24,6 +21,7 @@ class TimetableGenerator
             'Thu' => $timetable->max_lessons_thursday ?? 9,
             'Fri' => $timetable->max_lessons_friday ?? 9,
         ];
+        $maxSameSubjectPerDay = $timetable->max_same_subject_per_day ?? 2;
 
         // Fetch groups to schedule, sorted by priority DESC (highest priority first, nulls last)
         $groups = TimetableGroup::query()
@@ -32,225 +30,201 @@ class TimetableGenerator
             ->orderByRaw('CASE WHEN priority IS NULL THEN 1 ELSE 0 END, priority DESC')
             ->get();
 
-        $teacherBusy = [];
-        $roomBusy = [];
-        $studentBusy = [];
-        // Track how many times a specific group (subject instance for a class) is placed per day
-        // We previously tracked by subject_id globally, which incorrectly limited teachers.
-        $subjectCountPerDay = [];
-        $assignments = [];
+        // Build JSON input for Python solver
+        $groupsData = [];
         $totalUnits = 0;
         foreach ($groups as $g) {
+            $groupsData[] = [
+                'id' => $g->id,
+                'lessons_per_week' => (int)max(1, $g->lessons_per_week ?? 1),
+                'teacher_id' => $g->teacher_login_key_id,
+                'room_id' => $g->room_id,
+                'subject_id' => $g->subject_id,
+                'priority' => $g->priority,
+                'can_merge' => (bool)($g->can_merge_with_same_subject ?? false),
+                'student_ids' => $g->students->pluck('id')->toArray(),
+            ];
             $totalUnits += max(1, (int)($g->lessons_per_week ?? 1));
         }
-        // Attempt multi-run (5 attempts) and choose best (least unscheduled, then least conflicts)
-        $attemptsTotal = 5;
-        $best = null;
-        $bestScore = null;
-        $attemptSummaries = [];
 
-        for ($attempt = 1; $attempt <= $attemptsTotal; $attempt++) {
-            // Reset per-attempt state
-            $teacherBusy = [];
-            $roomBusy = [];
-            $studentBusy = [];
-            $subjectCountPerDay = [];
-            $assignmentsAttempt = [];
-            $remaining = [];
-            foreach ($groups as $g) { $remaining[$g->id] = max(1, (int)($g->lessons_per_week ?? 1)); }
-            $placedUnitsAttempt = 0;
-            $reasonCounters = [];
-            $passes = 0; // refinement passes inside one attempt
-            while ($passes < 3) { // keep internal refinement at 3
-                foreach ($groups as $group) {
-                    $target = $remaining[$group->id] ?? 0;
-                    if ($target <= 0) continue;
-                    $placedForGroup = 0;
-                    $dayOrder = $days;
-                    if ($passes > 0) { $dayOrder = $days; shuffle($dayOrder); }
-                    $loopGuard = 0;
-                    while ($placedForGroup < $target && $loopGuard < ($target * 3)) {
-                        foreach ($dayOrder as $day) {
-                            if ($placedForGroup >= $target) break;
-                            
-                            // Convert day name to day number (1-5)
-                            $dayNumber = match($day) {
-                                'Mon' => 1,
-                                'Tue' => 2,
-                                'Wed' => 3,
-                                'Thu' => 4,
-                                'Fri' => 5,
-                                default => 0,
-                            };
-                            
-                            // Check if teacher works on this day
-                            if ($group->teacher_login_key_id && !$timetable->isTeacherWorkingOnDay($group->teacher_login_key_id, $dayNumber)) {
-                                $reasonCounters[$group->id]['teacher_not_working'] = ($reasonCounters[$group->id]['teacher_not_working'] ?? 0) + 1;
-                                continue;
-                            }
-                            
-                            $subjectCountPerDay[$day] ??= [];
-                            $subjectCountPerDay[$day][$group->id] = $subjectCountPerDay[$day][$group->id] ?? 0;
-                            $maxSame = $timetable->max_same_subject_per_day ?? 2;
-                            if ($subjectCountPerDay[$day][$group->id] >= $maxSame) {
-                                $reasonCounters[$group->id]['subject_limit'] = ($reasonCounters[$group->id]['subject_limit'] ?? 0) + 1;
-                                continue;
-                            }
-                            $slotList = range(1, $dayCaps[$day]);
-                            // For high priority groups (priority >= 3), prefer slots 1-5 first
-                            // Never shuffle early slots for priority groups - always try them first
-                            // Only apply priority logic if use_priority_logic is enabled
-                            if (($timetable->use_priority_logic ?? true) && ($group->priority ?? 0) >= 3) {
-                                $earlySlots = array_filter($slotList, fn($s) => $s >= 1 && $s <= 5);
-                                $lateSlots = array_filter($slotList, fn($s) => $s > 5);
-                                // For priority groups: always try early slots first, shuffle late slots only if passes > 0
-                                if ($passes > 0) {
-                                    shuffle($lateSlots);
-                                }
-                                $slotList = array_merge($earlySlots, $lateSlots);
-                            } else {
-                                // For non-priority groups: shuffle all slots after first pass
-                                if ($passes > 0) shuffle($slotList);
-                            }
-                            $foundSlot = false;
-                            foreach ($slotList as $slot) {
-                                if ($group->teacher_login_key_id && isset($teacherBusy[$day][$slot][$group->teacher_login_key_id])) { $reasonCounters[$group->id]['teacher_conflict'] = ($reasonCounters[$group->id]['teacher_conflict'] ?? 0) + 1; continue; }
-                                if ($group->room_id && isset($roomBusy[$day][$slot][$group->room_id])) { $reasonCounters[$group->id]['room_conflict'] = ($reasonCounters[$group->id]['room_conflict'] ?? 0) + 1; continue; }
-                                $conflict = false;
-                                foreach ($group->students as $student) {
-                                    if (isset($studentBusy[$day][$slot][$student->id])) { $conflict = true; break; }
-                                }
-                                if ($conflict) { $reasonCounters[$group->id]['student_conflict'] = ($reasonCounters[$group->id]['student_conflict'] ?? 0) + 1; continue; }
-                                $assignmentsAttempt[] = [
-                                    'timetable_id' => $timetable->id,
-                                    'timetable_group_id' => $group->id,
-                                    'day' => $day,
-                                    'slot' => $slot,
-                                ];
-                                if ($group->teacher_login_key_id) { $teacherBusy[$day][$slot][$group->teacher_login_key_id] = true; }
-                                if ($group->room_id) { $roomBusy[$day][$slot][$group->room_id] = true; }
-                                foreach ($group->students as $student) { $studentBusy[$day][$slot][$student->id] = true; }
-                                $subjectCountPerDay[$day][$group->id]++;
-                                $placedForGroup++;
-                                $placedUnitsAttempt++;
-                                $remaining[$group->id]--;
-                                if ($progressCallback) {
-                                    $percent = (int) floor((($attempt - 1) + ($placedUnitsAttempt / max(1,$totalUnits))) / $attemptsTotal * 100);
-                                    $progressCallback(min(100,$percent));
-                                }
-                                $foundSlot = true;
-                                break;
-                            }
-                            if (!$foundSlot) {
-                                $reasonCounters[$group->id]['no_slot'] = ($reasonCounters[$group->id]['no_slot'] ?? 0) + 1;
-                            }
-                        }
-                        $loopGuard++;
-                    }
-                }
-                $still = array_sum(array_filter($remaining, fn($v) => $v > 0));
-                if ($still === 0) break;
-                $passes++;
-            }
-            // Compile attempt metrics
-            $unscheduled = [];
-            $unscheduledUnits = 0;
-            $reasonSummary = [
-                'teacher_conflict' => 0,
-                'room_conflict' => 0,
-                'student_conflict' => 0,
-                'subject_limit' => 0,
-                'no_slot' => 0,
-                'teacher_not_working' => 0,
+        // Collect teacher unavailability: map teacher_id -> day_name -> [[start,end],...]
+        $teacherUnavail = [];
+        $unavailRecords = $timetable->teacherUnavailabilities()->get();
+        $dayMap = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri'];
+        foreach ($unavailRecords as $rec) {
+            $tid = (string)$rec->teacher_login_key_id;
+            $dayName = $dayMap[$rec->day_of_week] ?? null;
+            if (!$dayName) continue;
+            $teacherUnavail[$tid] ??= [];
+            $teacherUnavail[$tid][$dayName] ??= [];
+            $teacherUnavail[$tid][$dayName][] = [
+                substr($rec->start_time, 0, 5), // HH:MM
+                substr($rec->end_time, 0, 5),
             ];
-            foreach ($groups as $group) {
-                if (($remaining[$group->id] ?? 0) > 0) {
-                    $unscheduledUnits += $remaining[$group->id];
-                    $reasons = $reasonCounters[$group->id] ?? [];
-                    foreach ($reasons as $rk => $rv) { if (isset($reasonSummary[$rk])) { $reasonSummary[$rk] += $rv; } }
-                    $reasonLabelsLt = [
-                        'teacher_conflict' => 'Mokytojas užimtas',
-                        'room_conflict' => 'Kabinetas užimtas',
-                        'student_conflict' => 'Mokiniai užimti',
-                        'subject_limit' => 'Per daug tos pačios pamokos tą dieną',
-                        'no_slot' => 'Nerastas tinkamas laikas',
-                        'teacher_not_working' => 'Mokytojas nedirba tą dieną',
-                    ];
-                    $reasonsTranslated = [];
-                    foreach ($reasons as $rk => $rv) {
-                        $reasonsTranslated[$rk] = [ 'label' => $reasonLabelsLt[$rk] ?? $rk, 'count' => $rv ];
-                    }
-                    $unscheduled[] = [
-                        'group_id' => $group->id,
-                        'group_name' => $group->name,
-                        'subject_id' => $group->subject_id,
-                        'subject_name' => $group->subject?->name,
-                        'teacher_login_key_id' => $group->teacher_login_key_id,
-                        'teacher_name' => $group->teacherLoginKey?->full_name,
-                        'room_id' => $group->room_id,
-                        'room_number' => $group->room?->number,
-                        'room_name' => $group->room?->name,
-                        'remaining_lessons' => $remaining[$group->id],
-                        'requested_lessons' => max(1, (int)($group->lessons_per_week ?? 1)),
-                        'reasons' => $reasons,
-                        'reasons_translated' => $reasonsTranslated,
-                    ];
+        }
+
+        $inputData = [
+            'days' => $days,
+            'day_caps' => $dayCaps,
+            'groups' => $groupsData,
+            'teacher_unavailability' => $teacherUnavail,
+            'max_same_subject_per_day' => $maxSameSubjectPerDay,
+            'lesson_times' => $timetable->school->lesson_times,
+            'max_time_seconds' => 120,
+            'num_workers' => 8,
+        ];
+
+        $jsonInput = json_encode($inputData, JSON_UNESCAPED_UNICODE);
+        $scriptPath = base_path('python/timetable_solver.py');
+        
+        // Detect Python executable (try python3 first, fallback to python)
+        $pythonCmd = 'python';
+        if (PHP_OS_FAMILY === 'Windows') {
+            // On Windows, try python first
+            exec('python --version 2>&1', $pyOutput, $pyCode);
+            if ($pyCode !== 0) {
+                // Fallback to py launcher
+                exec('py --version 2>&1', $pyOutput, $pyCode);
+                if ($pyCode === 0) {
+                    $pythonCmd = 'py';
                 }
             }
-            $reasonLabelsLt = [
-                'teacher_conflict' => 'Mokytojas užimtas',
-                'room_conflict' => 'Kabinetas užimtas',
-                'student_conflict' => 'Mokiniai užimti',
-                'subject_limit' => 'Per daug tos pačios pamokos tą dieną',
-                'no_slot' => 'Nerastas tinkamas laikas',
-                'teacher_not_working' => 'Mokytojas nedirba tą dieną',
-            ];
-            $reasonSummaryTranslated = [];
-            foreach ($reasonSummary as $k => $v) {
-                $reasonSummaryTranslated[$k] = [ 'label' => $reasonLabelsLt[$k] ?? $k, 'count' => $v ];
+        } else {
+            // Unix: try python3 first
+            exec('python3 --version 2>&1', $pyOutput, $pyCode);
+            if ($pyCode === 0) {
+                $pythonCmd = 'python3';
+            } else {
+                exec('python --version 2>&1', $pyOutput, $pyCode);
+                if ($pyCode === 0) {
+                    $pythonCmd = 'python';
+                }
             }
-            $conflictScore = ($unscheduledUnits * 10000) + array_sum($reasonSummary); // prioritize unscheduled
-            $attemptSummaries[] = [
-                'attempt' => $attempt,
-                'passes' => $passes + 1,
-                'placed_units' => $placedUnitsAttempt,
-                'unscheduled_units' => $unscheduledUnits,
-                'conflict_score' => $conflictScore,
-                'reason_summary' => $reasonSummary,
-                'reason_summary_translated' => $reasonSummaryTranslated,
-            ];
-            if ($best === null || $conflictScore < $bestScore) {
-                $best = [
-                    'assignments' => $assignmentsAttempt,
-                    'unscheduled' => $unscheduled,
-                    'unscheduled_units' => $unscheduledUnits,
-                    'reason_summary' => $reasonSummary,
-                    'reason_summary_translated' => $reasonSummaryTranslated,
-                    'placed_units' => $placedUnitsAttempt,
-                    'passes' => $passes + 1,
-                    'attempt' => $attempt,
+        }
+
+        $descriptors = [
+            0 => ['pipe', 'r'],  // stdin
+            1 => ['pipe', 'w'],  // stdout
+            2 => ['pipe', 'w'],  // stderr
+        ];
+        
+        // Save input for debugging
+        file_put_contents(storage_path('logs/last_timetable_input.json'), $jsonInput);
+        
+        $process = proc_open("$pythonCmd \"$scriptPath\"", $descriptors, $pipes);
+        if (!is_resource($process)) {
+            throw new \Exception('Failed to start Python solver process');
+        }
+
+        fwrite($pipes[0], $jsonInput);
+        fclose($pipes[0]);
+
+        $output = stream_get_contents($pipes[1]);
+        $error = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exitCode = proc_close($process);
+
+        if ($exitCode !== 0 || !$output) {
+            throw new \Exception("Python solver failed (exit $exitCode): $error");
+        }
+
+        // Extract JSON from output (last line that starts with '{')
+        $lines = explode("\n", trim($output));
+        $jsonLine = null;
+        foreach (array_reverse($lines) as $line) {
+            $line = trim($line);
+            if ($line && $line[0] === '{') {
+                $jsonLine = $line;
+                break;
+            }
+        }
+        
+        if (!$jsonLine) {
+            \Log::error('No JSON found in Python output: ' . $output);
+            throw new \Exception("Python solver failed: no JSON output");
+        }
+        
+        $result = json_decode($jsonLine, true);
+        if (!$result || !($result['success'] ?? false)) {
+            $errMsg = $result['error'] ?? 'Unknown error';
+            throw new \Exception("Solver error: $errMsg");
+        }
+
+        $assignments = $result['assignments'] ?? [];
+        $placedUnits = $result['placed_units'] ?? 0;
+        $unplacedInfo = $result['unplaced_groups'] ?? [];
+
+        // Build map of unplaced reasons from solver
+        $unplacedReasons = [];
+        foreach ($unplacedInfo as $info) {
+            $unplacedReasons[$info['group_id']] = $info['reason'] ?? 'Nežinoma priežastis';
+        }
+
+        // Calculate unscheduled groups
+        $scheduledGroupIds = array_unique(array_column($assignments, 'timetable_group_id'));
+        $unscheduled = [];
+        $unscheduledUnits = 0;
+        foreach ($groups as $g) {
+            $requested = max(1, (int)($g->lessons_per_week ?? 1));
+            $scheduled = count(array_filter($assignments, fn($a) => $a['timetable_group_id'] === $g->id));
+            if ($scheduled < $requested) {
+                $remaining = $requested - $scheduled;
+                $unscheduledUnits += $remaining;
+                
+                // Get reason from solver or use generic
+                $reason = $unplacedReasons[$g->id] ?? 'Nepakanka tvarkaraščio vietos';
+                
+                $unscheduled[] = [
+                    'group_id' => $g->id,
+                    'group_name' => $g->name,
+                    'subject_id' => $g->subject_id,
+                    'subject_name' => $g->subject?->name,
+                    'teacher_login_key_id' => $g->teacher_login_key_id,
+                    'teacher_name' => $g->teacherLoginKey?->full_name,
+                    'room_id' => $g->room_id,
+                    'room_number' => $g->room?->number,
+                    'room_name' => $g->room?->name,
+                    'remaining_lessons' => $remaining,
+                    'requested_lessons' => $requested,
+                    'reason_text' => $reason,
+                    'reasons' => ['solver_constraint' => 1],
+                    'reasons_translated' => [
+                        'solver_constraint' => ['label' => $reason, 'count' => 1]
+                    ],
                 ];
-                $bestScore = $conflictScore;
             }
         }
-        // Persist only best attempt
-        if (method_exists($timetable, 'slots')) {
-            $timetable->slots()->delete();
-            if (!empty($best['assignments'])) {
-                $timetable->slots()->insert($best['assignments']);
+
+        $reasonSummary = ['solver_insufficient_capacity' => count($unscheduled)];
+        $reasonSummaryTranslated = [
+            'solver_insufficient_capacity' => ['label' => 'Nepakanka tvarkaraščio vietos', 'count' => count($unscheduled)]
+        ];
+
+        // Persist assignments
+        $timetable->slots()->delete();
+        if (!empty($assignments)) {
+            foreach ($assignments as &$a) {
+                $a['timetable_id'] = $timetable->id;
             }
+            $timetable->slots()->insert($assignments);
         }
+
+        if ($progressCallback) {
+            $progressCallback(100);
+        }
+
         return [
-            'unscheduled' => $best['unscheduled'],
-            'passes' => $best['passes'],
-            'attempts' => $attemptsTotal,
-            'best_attempt' => $best['attempt'],
-            'attempt_summaries' => $attemptSummaries,
+            'unscheduled' => $unscheduled,
+            'passes' => 1,
+            'attempts' => 1,
+            'best_attempt' => 1,
+            'attempt_summaries' => [],
             'total_units' => $totalUnits,
-            'placed_units' => $best['placed_units'],
-            'unscheduled_units' => $best['unscheduled_units'],
-            'reason_summary' => $best['reason_summary'],
-            'reason_summary_translated' => $best['reason_summary_translated'],
+            'placed_units' => $placedUnits,
+            'unscheduled_units' => $unscheduledUnits,
+            'reason_summary' => $reasonSummary,
+            'reason_summary_translated' => $reasonSummaryTranslated,
         ];
     }
 }
