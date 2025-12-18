@@ -66,6 +66,14 @@ class Timetable extends Model
     }
 
     /**
+     * Teacher unavailability time ranges (per day of week and slot ranges).
+     */
+    public function teacherUnavailabilities()
+    {
+        return $this->hasMany(TimetableTeacherUnavailability::class);
+    }
+
+    /**
      * Get working days for a specific teacher in this timetable.
      * Returns array of day numbers (1-5) when teacher works.
      */
@@ -91,5 +99,28 @@ class Timetable extends Model
         }
         
         return in_array($dayOfWeek, $workingDays);
+    }
+
+    /**
+     * Check if teacher is unavailable for the given day and time.
+     * Converts slot number to time (assuming slot duration and start time).
+     * For simplicity: slot 1 = 08:00, slot 2 = 09:00, etc.
+     */
+    public function isTeacherUnavailableAtSlot($teacherLoginKeyId, int $dayOfWeek, int $slot): bool
+    {
+        // Map slot to approximate time (adjust as needed for your school schedule)
+        $slotStartTime = sprintf('%02d:00:00', 7 + $slot); // e.g., slot 1 = 08:00
+        $slotEndTime = sprintf('%02d:00:00', 8 + $slot);   // e.g., slot 1 ends at 09:00
+        
+        // Check if any unavailability range overlaps with this slot's time
+        return $this->teacherUnavailabilities()
+            ->where('teacher_login_key_id', $teacherLoginKeyId)
+            ->where('day_of_week', $dayOfWeek)
+            ->where(function($q) use ($slotStartTime, $slotEndTime) {
+                // Range overlaps if: start_time < slotEnd AND end_time > slotStart
+                $q->where('start_time', '<', $slotEndTime)
+                  ->where('end_time', '>', $slotStartTime);
+            })
+            ->exists();
     }
 }

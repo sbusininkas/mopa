@@ -428,6 +428,76 @@ class TimetableController extends Controller
         return response()->json($data);
     }
 
+    public function allTeachersUnavailability(School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+
+        $teachers = $school->loginKeys()->where('type', 'teacher')->get();
+        $data = [];
+        foreach ($teachers as $teacher) {
+            $ranges = $timetable->teacherUnavailabilities()
+                ->where('teacher_login_key_id', $teacher->id)
+                ->orderBy('day_of_week')
+                ->orderBy('start_time')
+                ->get(['day_of_week','start_time','end_time'])
+                ->map(fn($r) => [
+                    'day' => (int)$r->day_of_week,
+                    'start' => substr($r->start_time, 0, 5), // HH:MM
+                    'end' => substr($r->end_time, 0, 5),     // HH:MM
+                ]);
+            $data[] = [
+                'teacher_id' => $teacher->id,
+                'teacher_name' => $teacher->full_name,
+                'unavailability' => $ranges,
+            ];
+        }
+        return response()->json($data);
+    }
+
+    public function updateTeacherUnavailability(Request $request, School $school, Timetable $timetable)
+    {
+        abort_unless($timetable->school_id === $school->id, 404);
+        $validated = $request->validate([
+            'teacher_id' => 'required|integer',
+            'ranges' => 'required|array',
+            'ranges.*.day' => 'required|integer|between:1,5',
+            'ranges.*.start' => 'required|string|regex:/^\d{1,2}:\d{2}$/',
+            'ranges.*.end' => 'required|string|regex:/^\d{1,2}:\d{2}$/',
+        ]);
+        
+        // Validate that start < end for each range
+        foreach ($validated['ranges'] as $r) {
+            if ($r['start'] >= $r['end']) {
+                return response()->json(['error' => 'Pradžios laikas turi būti ankstesnis už pabaigos laiką'], 422);
+            }
+        }
+        
+        // Convert to HH:MM:SS format
+        $normalized = [];
+        foreach ($validated['ranges'] as $r) {
+            $normalized[] = [
+                'day' => (int)$r['day'], 
+                'start' => $r['start'] . ':00', 
+                'end' => $r['end'] . ':00'
+            ];
+        }
+
+        // Delete existing and insert new
+        $timetable->teacherUnavailabilities()
+            ->where('teacher_login_key_id', $validated['teacher_id'])
+            ->delete();
+
+        foreach ($normalized as $r) {
+            $timetable->teacherUnavailabilities()->create([
+                'teacher_login_key_id' => $validated['teacher_id'],
+                'day_of_week' => $r['day'],
+                'start_time' => $r['start'],
+                'end_time' => $r['end'],
+            ]);
+        }
+
+        return response()->json(['success' => true]);
+    }
     public function updateTeacherWorkingDays(Request $request, School $school, Timetable $timetable)
     {
         abort_unless($timetable->school_id === $school->id, 404);
@@ -489,6 +559,16 @@ class TimetableController extends Controller
         }
         $day = $validated['day'];
         $slot = (int)$validated['slot'];
+        // Map day code to 1..5
+        $dayMap = ['Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5];
+        $dayNum = $dayMap[$day] ?? null;
+        if (!$dayNum) {
+            return response()->json(['error' => 'Neteisinga diena'], 422);
+        }
+        // Check teacher unavailability
+        if ($timetable->isTeacherUnavailableAtSlot($group->teacher_login_key_id, $dayNum, $slot)) {
+            return response()->json(['error' => 'Mokytojas nurodė, kad tuo laiku negali dirbti'], 422);
+        }
         $isMerge = $validated['merge'] ?? false;
         
         // Conflict checks (teacher, room, students per same day+slot)
@@ -837,6 +917,18 @@ class TimetableController extends Controller
         }
         $day = $validated['day'];
         $slot = (int)$validated['slot'];
+        // Map day code to 1..5 and check teacher availability
+        $dayMap = ['Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5];
+        $dayNum = $dayMap[$day] ?? null;
+        if (!$dayNum) {
+            return response()->json(['error' => 'Neteisinga diena'], 422);
+        }
+        if (!$timetable->isTeacherWorkingOnDay($group->teacher_login_key_id, $dayNum)) {
+            return response()->json(['error' => 'Mokytojas nedirba pasirinktą dieną'], 422);
+        }
+        if ($timetable->isTeacherUnavailableAtSlot($group->teacher_login_key_id, $dayNum, $slot)) {
+            return response()->json(['error' => 'Mokytojas nurodė, kad tuo laiku negali dirbti'], 422);
+        }
         $allowSwap = $validated['swap'] ?? false;
         
         // If moving to same position, no-op

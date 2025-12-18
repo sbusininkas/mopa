@@ -144,6 +144,9 @@ Route::middleware(['auth', 'school.admin.or.supervisor'])->group(function () {
     Route::get('/admin/schools/{school}/timetables/{timetable}/teacher-working-days', [\App\Http\Controllers\TimetableController::class, 'getTeacherWorkingDays'])->name('schools.timetables.teacher-working-days');
     Route::post('/admin/schools/{school}/timetables/{timetable}/teacher-working-days', [\App\Http\Controllers\TimetableController::class, 'updateTeacherWorkingDays'])->name('schools.timetables.update-teacher-working-days');
     Route::get('/admin/schools/{school}/timetables/{timetable}/all-teachers-working-days', [\App\Http\Controllers\TimetableController::class, 'allTeachersWorkingDays'])->name('schools.timetables.all-teachers-working-days');
+    // Teacher unavailability time ranges
+    Route::get('/admin/schools/{school}/timetables/{timetable}/all-teachers-unavailability', [\App\Http\Controllers\TimetableController::class, 'allTeachersUnavailability'])->name('schools.timetables.all-teachers-unavailability');
+    Route::post('/admin/schools/{school}/timetables/{timetable}/teacher-unavailability', [\App\Http\Controllers\TimetableController::class, 'updateTeacherUnavailability'])->name('schools.timetables.update-teacher-unavailability');
 
     // Timetable groups
     Route::get('/admin/schools/{school}/timetables/{timetable}/groups-list', [\App\Http\Controllers\TimetableGroupController::class, 'list'])->name('schools.timetables.groups.list');
