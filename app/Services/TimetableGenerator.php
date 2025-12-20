@@ -33,6 +33,8 @@ class TimetableGenerator
         // Build JSON input for Python solver
         $groupsData = [];
         $totalUnits = 0;
+        $existingSlots = [];  // Collect existing slots for locked groups
+        
         foreach ($groups as $g) {
             $groupsData[] = [
                 'id' => $g->id,
@@ -43,8 +45,21 @@ class TimetableGenerator
                 'priority' => $g->priority,
                 'can_merge' => (bool)($g->can_merge_with_same_subject ?? false),
                 'student_ids' => $g->students->pluck('id')->toArray(),
+                'is_locked' => (bool)($g->is_locked ?? false),
             ];
             $totalUnits += max(1, (int)($g->lessons_per_week ?? 1));
+            
+            // If group is locked, collect its existing slots
+            if ($g->is_locked) {
+                $slots = $g->slots()->get();
+                foreach ($slots as $slot) {
+                    $existingSlots[] = [
+                        'timetable_group_id' => $g->id,
+                        'day' => $slot->day,
+                        'slot' => $slot->slot,
+                    ];
+                }
+            }
         }
 
         // Collect teacher unavailability: map teacher_id -> day_name -> [[start,end],...]
@@ -70,6 +85,7 @@ class TimetableGenerator
             'teacher_unavailability' => $teacherUnavail,
             'max_same_subject_per_day' => $maxSameSubjectPerDay,
             'lesson_times' => $timetable->school->lesson_times,
+            'existing_slots' => $existingSlots,  // Pass existing slots for locked groups
             'max_time_seconds' => 120,
             'num_workers' => 8,
         ];

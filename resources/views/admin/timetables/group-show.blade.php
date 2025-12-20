@@ -18,6 +18,78 @@
     @endif
 
     <div class="row g-3">
+            <!-- Group Timetable Table (styled like teacher view) -->
+            <div class="card mt-3">
+                <div class="card-header bg-dark text-white">
+                    <strong><i class="bi bi-calendar3"></i> Grupės tvarkaraštis</strong>
+                </div>
+                <div class="alert alert-info mt-2" style="font-size:0.97rem">
+                    <i class="bi bi-info-circle"></i>
+                    Šiame tvarkaraštyje rodomos visos šio dalyko pamokos su tuo pačiu mokytoju ir bent vienu bendru mokiniu (nebūtinai visi tie patys mokiniai). Dabartinės grupės pamokos pažymėtos mėlynai.
+                </div>
+                <div class="card-body p-0">
+                    @php
+                        $days = ['Mon' => 'Pirmadienis', 'Tue' => 'Antradienis', 'Wed' => 'Trečiadienis', 'Thu' => 'Ketvirtadienis', 'Fri' => 'Penktadienis'];
+                        $maxSlot = 1;
+                        $groupStudentIds = $group->students->pluck('id')->toArray();
+                        $allSlots = $group->timetable->slots()->with(['group.students', 'group.subject', 'group.teacherLoginKey'])->get();
+                        // Find all group ids with same subject, same teacher, and at least one common student
+                        $relatedGroupIds = collect();
+                        foreach ($allSlots as $slot) {
+                            $g = $slot->group;
+                            if (!$g) continue;
+                            if ($g->subject_id === $group->subject_id && $g->teacher_login_key_id === $group->teacher_login_key_id) {
+                                $studentIds = $g->students->pluck('id')->toArray();
+                                if (count(array_intersect($groupStudentIds, $studentIds)) > 0) {
+                                    $relatedGroupIds->push($g->id);
+                                }
+                            }
+                        }
+                        $relatedGroupIds = $relatedGroupIds->unique()->values();
+                        // Now collect all slots for these groups
+                        $slots = $group->timetable->slots()->whereIn('timetable_group_id', $relatedGroupIds)->with(['group.subject'])->get();
+                        foreach ($slots as $slot) {
+                            if ((int)$slot->slot > $maxSlot) $maxSlot = (int)$slot->slot;
+                        }
+                        $grid = [];
+                        foreach ($slots as $slot) {
+                            $grid[(int)$slot->slot][$slot->day][] = $slot;
+                        }
+                    @endphp
+                    <div class="table-responsive">
+                        <table class="table table-bordered align-middle mb-0" style="min-width: 700px;">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="width:60px" class="text-center">#</th>
+                                    @foreach($days as $code => $label)
+                                        <th class="text-center">{{ $label }}</th>
+                                    @endforeach
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for($row=1; $row <= $maxSlot; $row++)
+                                    <tr>
+                                        <td class="text-center fw-bold">{{ $row }}</td>
+                                        @foreach($days as $code => $label)
+                                            @php $slotsHere = $grid[$row][$code] ?? []; @endphp
+                                            <td class="text-center timetable-cell" style="min-width:180px">
+                                                @if(count($slotsHere))
+                                                    @foreach($slotsHere as $slot)
+                                                        @php $isCurrent = $slot->timetable_group_id == $group->id; @endphp
+                                                        <span class="badge {{ $isCurrent ? 'bg-primary' : 'bg-secondary' }} mb-1" style="font-size:0.75rem;">{{ $slot->group->name }}<br/><small>{{ $slot->group->subject->name ?? '' }}</small></span><br>
+                                                    @endforeach
+                                                @else
+                                                    <span class="text-muted">—</span>
+                                                @endif
+                                            </td>
+                                        @endforeach
+                                    </tr>
+                                @endfor
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         <div class="col-lg-12">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">

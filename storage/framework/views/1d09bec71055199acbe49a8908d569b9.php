@@ -78,12 +78,16 @@ function renderGroupHTML(group) {
     const weekTypeLabel = group.week_type === 'all' ? 'Kiekv. savaitė' : (group.week_type === 'even' ? 'Lyginės' : 'Nelyginės');
     const roomBadge = group.room_number ? `<span class="badge bg-dark">${group.room_number} ${group.room_name || ''}</span>` : '';
     const priorityBadge = group.is_priority ? `<span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> Prioritetinė</span>` : '';
+    const lockBadge = group.is_locked ? `<span class="badge bg-success"><i class="bi bi-lock-fill"></i> Užrakinta</span>` : '';
     const groupDetailsUrl = `<?php echo e(route('schools.timetables.groups.details', [$school, $timetable, ':groupId'])); ?>`.replace(':groupId', group.id);
+    const lockIcon = group.is_locked ? 'bi-unlock' : 'bi-lock';
+    const lockTitle = group.is_locked ? 'Atrakinti grupę' : 'Užrakinti grupę';
+    const lockClass = group.is_locked ? 'btn-success' : 'btn-outline-secondary';
     
     return `
         <div class="modern-card mb-2" id="group${group.id}">
-            <div class="d-flex justify-content-between align-items-center py-2 px-3" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#groupCollapse${group.id}" aria-expanded="false">
-                <div class="d-flex align-items-center gap-2">
+            <div class="d-flex justify-content-between align-items-center py-2 px-3">
+                <div class="d-flex align-items-center gap-2" style="cursor:pointer; flex-grow: 1;" data-bs-toggle="collapse" data-bs-target="#groupCollapse${group.id}" aria-expanded="false">
                     <a href="${groupDetailsUrl}" class="group-name-link" onclick="event.stopPropagation()"><strong>${group.name}</strong></a>
                     <span class="badge bg-secondary">${group.subject_name || ''}</span>
                     <span class="badge bg-info text-dark">${group.teacher_name || ''}</span>
@@ -91,10 +95,14 @@ function renderGroupHTML(group) {
                     <span class="badge bg-light text-dark">${weekTypeLabel}</span>
                     <span class="badge bg-primary">${group.lessons_per_week} pam./sav.</span>
                     ${priorityBadge}
+                    ${lockBadge}
                 </div>
                 <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editGroup${group.id}" onclick="event.stopPropagation()"><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteGroup${group.id}" onclick="event.stopPropagation()"><i class="bi bi-trash"></i></button>
+                    <button class="btn ${lockClass}" onclick="toggleGroupLock(${group.id}, event)" title="${lockTitle}">
+                        <i class="bi ${lockIcon}"></i>
+                    </button>
+                    <button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editGroup${group.id}"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteGroup${group.id}"><i class="bi bi-trash"></i></button>
                 </div>
             </div>
             <div class="collapse" id="groupCollapse${group.id}">
@@ -214,9 +222,15 @@ function renderGroupHTML(group) {
                                 <label class="form-label">Pamokų per savaitę</label>
                                 <input type="number" name="lessons_per_week" class="form-control" value="${group.lessons_per_week}" min="1" max="20" required>
                             </div>
-                            <div class="form-check">
+                            <div class="form-check mb-3">
                                 <input class="form-check-input" type="checkbox" name="is_priority" id="is_priority${group.id}" ${group.is_priority ? 'checked' : ''}>
                                 <label class="form-check-label" for="is_priority${group.id}">Prioritetinė grupė</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="can_merge_with_same_subject" id="can_merge_with_same_subject${group.id}" ${group.can_merge_with_same_subject ? 'checked' : ''}>
+                                <label class="form-check-label" for="can_merge_with_same_subject${group.id}">
+                                    <i class="bi bi-link-45deg"></i> Leisti tvarkaraštyje sulieti grupę su to paties dalyko grupe
+                                </label>
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -252,6 +266,117 @@ function renderGroupHTML(group) {
             </div>
         </div>
     `;
+}
+
+// Toggle group lock status
+async function toggleGroupLock(groupId, event) {
+    event.stopPropagation();
+    event.preventDefault();
+    
+    const url = `<?php echo e(route('schools.timetables.groups.toggle-lock', [$school, $timetable, ':groupId'])); ?>`.replace(':groupId', groupId);
+    const button = event.currentTarget;
+    const icon = button.querySelector('i');
+    const groupCard = document.getElementById(`group${groupId}`);
+    
+    // Get current accordion state
+    const collapseElement = document.getElementById(`groupCollapse${groupId}`);
+    const wasExpanded = collapseElement && collapseElement.classList.contains('show');
+    
+    try {
+        // Show loading state
+        const originalHtml = button.innerHTML;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        button.disabled = true;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update button and badge without reloading entire list
+            const isLocked = data.is_locked;
+            
+            // Update button appearance
+            button.className = isLocked ? 'btn btn-success' : 'btn btn-outline-secondary';
+            button.title = isLocked ? 'Atrakinti grupę' : 'Užrakinti grupę';
+            icon.className = isLocked ? 'bi bi-unlock' : 'bi bi-lock';
+            
+            // Update lock badge in header
+            const headerDiv = groupCard.querySelector('.d-flex.align-items-center.gap-2');
+            const existingLockBadge = headerDiv.querySelector('.badge.bg-success');
+            
+            if (isLocked) {
+                if (!existingLockBadge) {
+                    const lockBadge = document.createElement('span');
+                    lockBadge.className = 'badge bg-success';
+                    lockBadge.innerHTML = '<i class="bi bi-lock-fill"></i> Užrakinta';
+                    headerDiv.appendChild(lockBadge);
+                }
+            } else {
+                if (existingLockBadge) {
+                    existingLockBadge.remove();
+                }
+            }
+            
+            // Show toast notification
+            showToast(data.message, 'success');
+            
+            // Restore accordion state if it was expanded
+            if (wasExpanded && collapseElement) {
+                // Don't collapse it
+            }
+        } else {
+            showToast('Klaida keičiant užrakinimo būseną', 'error');
+        }
+        
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+        
+    } catch (error) {
+        console.error('Error toggling lock:', error);
+        showToast('Klaida: ' + error.message, 'error');
+        button.disabled = false;
+    }
+}
+
+// Show toast notification
+function showToast(message, type = 'success') {
+    const toastHtml = `
+        <div class="position-fixed top-0 end-0 p-3" style="z-index: 1080">
+            <div class="toast align-items-center text-bg-${type === 'success' ? 'success' : 'danger'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="bi ${type === 'success' ? 'bi-check-circle' : 'bi-exclamation-triangle'} me-2"></i>${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const toastContainer = document.createElement('div');
+    toastContainer.innerHTML = toastHtml;
+    document.body.appendChild(toastContainer);
+    
+    const toastElement = toastContainer.querySelector('.toast');
+    const toast = new bootstrap.Toast(toastElement);
+    toast.show();
+    
+    // Remove toast element after it's hidden
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastContainer.remove();
+    });
 }
 
 // Load groups on page load
@@ -1136,18 +1261,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function loadTeachersWorkingDays() {
         const listContainer = document.getElementById('teachersWorkingDaysList');
-        
-        fetch('<?php echo e(route('schools.timetables.all-teachers-working-days', [$school, $timetable])); ?>')
-            .then(r => r.json())
-            .then(data => {
-                teachersData = data;
-                loaded = true;
-                renderTeachersList();
-            })
-            .catch(e => {
-                console.error(e);
-                listContainer.innerHTML = '<div class="alert alert-danger">Klaida kraunant mokytojų duomenis</div>';
-            });
+        Promise.all([
+            fetch('<?php echo e(route('schools.timetables.all-teachers-working-days', [$school, $timetable])); ?>').then(r => r.json()),
+            fetch('<?php echo e(route('schools.timetables.all-teachers-unavailability', [$school, $timetable])); ?>').then(r => r.json())
+        ])
+        .then(([daysData, unavailData]) => {
+            // Merge datasets by teacher_id
+            const unavailMap = new Map();
+            unavailData.forEach(u => unavailMap.set(u.teacher_id, u.unavailability || []));
+            teachersData = daysData.map(d => ({
+                teacher_id: d.teacher_id,
+                teacher_name: d.teacher_name,
+                working_days: d.working_days || [],
+                unavailability: unavailMap.get(d.teacher_id) || []
+            }));
+            loaded = true;
+            renderTeachersList();
+        })
+        .catch(e => {
+            console.error(e);
+            listContainer.innerHTML = '<div class="alert alert-danger">Klaida kraunant mokytojų duomenis</div>';
+        });
     }
 
     function renderTeachersList() {
@@ -1168,20 +1302,26 @@ document.addEventListener('DOMContentLoaded', function() {
         let html = '<div class="list-group">';
         
         teachersData.forEach(teacher => {
-            const allDays = teacher.working_days.length === 0 || teacher.working_days.length === 5;
-            const dayBadges = allDays 
-                ? '<span class="badge bg-success">Visos dienos</span>'
-                : teacher.working_days.sort().map(d => `<span class="badge bg-primary me-1">${dayNames[d]}</span>`).join('');
+            // Unavailability summary
+            const summaryByDay = {};
+            (teacher.unavailability || []).forEach(r => {
+                const dn = dayNames[r.day] || r.day;
+                summaryByDay[dn] = summaryByDay[dn] || [];
+                summaryByDay[dn].push(`${r.start}–${r.end}`);
+            });
+            const unavailHtml = Object.keys(summaryByDay).length
+                ? Object.entries(summaryByDay).map(([dn, ranges]) => `<span class="badge bg-danger-subtle text-danger border me-1">${dn}: ${ranges.join(', ')}</span>`).join('')
+                : '<span class="badge bg-light text-muted">Nėra apribojimų</span>';
 
             html += `
                 <div class="list-group-item">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <strong>${teacher.teacher_name}</strong>
-                            <div class="mt-1">${dayBadges}</div>
+                            <div class="mt-2 small" id="unavail-summary-${teacher.teacher_id}">${unavailHtml}</div>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="editTeacherWorkingDays(${teacher.teacher_id})">
-                            <i class="bi bi-pencil"></i> Redaguoti
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="editTeacherUnavailability(${teacher.teacher_id})">
+                            <i class="bi bi-slash-circle"></i> Nedarbo laikai
                         </button>
                     </div>
                 </div>
@@ -1192,12 +1332,158 @@ document.addEventListener('DOMContentLoaded', function() {
         listContainer.innerHTML = html;
     }
 
-    window.editTeacherWorkingDays = function(teacherId) {
+    // Unavailability editor
+    window.editTeacherUnavailability = function(teacherId) {
         const teacher = teachersData.find(t => t.teacher_id === teacherId);
         if (!teacher) return;
+        const dayNames = { 1:'Pirmadienis',2:'Antradienis',3:'Trečiadienis',4:'Ketvirtadienis',5:'Penktadienis' };
+        const current = teacher.unavailability || [];
 
-        const currentDays = teacher.working_days.length === 0 ? [1, 2, 3, 4, 5] : teacher.working_days;
+        function renderRows(day) {
+            const rows = current.filter(r => r.day === day).map((r, idx) => `
+                <div class="d-flex align-items-center gap-2 mb-2 unavail-row" data-day="${day}" data-idx="${idx}">
+                    <label class="form-label mb-0 me-2">${dayNames[day]}</label>
+                    <input type="text" class="form-control form-control-sm time-picker" style="width:100px" value="${r.start}" data-day="${day}" data-idx="${idx}" data-field="start" placeholder="HH:MM">
+                    <span>iki</span>
+                    <input type="text" class="form-control form-control-sm time-picker" style="width:100px" value="${r.end}" data-day="${day}" data-idx="${idx}" data-field="end" placeholder="HH:MM">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-action="remove" data-day="${day}" data-idx="${idx}"><i class="bi bi-x"></i></button>
+                </div>
+            `).join('');
+            return rows || '<div class="text-muted small">Nėra apribojimų</div>';
+        }
 
+        let sections = '';
+        for (let day=1; day<=5; day++) {
+            sections += `
+                <div class="border rounded p-2 mb-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong>${dayNames[day]}</strong>
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-action="add" data-day="${day}"><i class="bi bi-plus"></i> Pridėti intervalą</button>
+                    </div>
+                    <div class="mt-2" id="unavailDay${day}">${renderRows(day)}</div>
+                </div>`;
+        }
+
+        const modalHtml = `
+            <div class="modal fade" id="teacherUnavailabilityModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title"><i class="bi bi-slash-circle"></i> ${teacher.teacher_name} - Nedarbo laikai</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">${sections}</div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
+                            <button type="button" class="btn btn-danger" id="saveUnavailabilityBtn"><i class="bi bi-save"></i> Išsaugoti</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+
+        const existing = document.getElementById('teacherUnavailabilityModal');
+        if (existing) existing.remove();
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = new bootstrap.Modal(document.getElementById('teacherUnavailabilityModal'));
+        modal.show();
+        const root = document.getElementById('teacherUnavailabilityModal');
+
+        // Initialize Flatpickr on all existing time picker inputs
+        root.querySelectorAll('.time-picker').forEach(input => {
+            flatpickr(input, {
+                enableTime: true,
+                noCalendar: true,
+                dateFormat: "H:i",
+                time_24hr: true
+            });
+        });
+
+        root.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            const action = btn.dataset.action;
+            const day = parseInt(btn.dataset.day || '0');
+            if (action === 'add') {
+                current.push({ day, start: '08:00', end: '09:00' });
+                document.getElementById('unavailDay' + day).innerHTML = renderRows(day);
+                // Initialize Flatpickr on newly added inputs
+                document.querySelectorAll(`#unavailDay${day} .time-picker`).forEach(input => {
+                    flatpickr(input, {
+                        enableTime: true,
+                        noCalendar: true,
+                        dateFormat: "H:i",
+                        time_24hr: true
+                    });
+                });
+                updateUnavailabilitySummary(teacherId);
+            } else if (action === 'remove') {
+                const idx = parseInt(btn.dataset.idx || '0');
+                // remove matching by day and idx among filtered
+                let count = -1;
+                current = current.filter(r => {
+                    if (r.day !== day) return true;
+                    count++;
+                    return count !== idx;
+                });
+                document.getElementById('unavailDay' + day).innerHTML = renderRows(day);
+                // Reinitialize Flatpickr on remaining inputs
+                document.querySelectorAll(`#unavailDay${day} .time-picker`).forEach(input => {
+                    flatpickr(input, {
+                        enableTime: true,
+                        noCalendar: true,
+                        dateFormat: "H:i",
+                        time_24hr: true
+                    });
+                });
+                updateUnavailabilitySummary(teacherId);
+            }
+        });
+
+        root.addEventListener('input', (e) => {
+            const input = e.target.closest('input[data-field]');
+            if (!input) return;
+            const day = parseInt(input.dataset.day);
+            const idx = parseInt(input.dataset.idx);
+            const field = input.dataset.field;
+            const val = input.value; // Now stores HH:MM format
+            // update nth row for that day
+            let count = -1;
+            current.forEach(r => {
+                if (r.day !== day) return;
+                count++;
+                if (count === idx) { r[field] = val; }
+            });
+            updateUnavailabilitySummary(teacherId);
+        });
+
+        root.querySelector('#saveUnavailabilityBtn').addEventListener('click', () => {
+            fetch('<?php echo e(route('schools.timetables.update-teacher-unavailability', [$school, $timetable])); ?>', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '<?php echo e(csrf_token()); ?>' },
+                body: JSON.stringify({ teacher_id: teacherId, ranges: current })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    // update local and update summary immediately
+                    teacher.unavailability = current;
+                    updateUnavailabilitySummary(teacherId);
+                    const m = bootstrap.Modal.getInstance(root);
+                    if (m) m.hide();
+                } else {
+                        showErrorModal(data.error || 'Nepavyko išsaugoti');
+                }
+            })
+                .catch(() => showErrorModal('Nepavyko išsaugoti'));
+        });
+
+        root.addEventListener('hidden.bs.modal', function(){ this.remove(); });
+    }
+
+    function updateUnavailabilitySummary(teacherId) {
+        const teacher = teachersData.find(t => t.teacher_id === teacherId);
+        if (!teacher) return;
+        
         const dayNames = {
             1: 'Pirmadienis',
             2: 'Antradienis',
@@ -1205,105 +1491,23 @@ document.addEventListener('DOMContentLoaded', function() {
             4: 'Ketvirtadienis',
             5: 'Penktadienis'
         };
-
-        let checkboxes = '';
-        for (let day = 1; day <= 5; day++) {
-            const checked = currentDays.includes(day) ? 'checked' : '';
-            checkboxes += `
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" value="${day}" id="day${day}" ${checked}>
-                    <label class="form-check-label" for="day${day}">${dayNames[day]}</label>
-                </div>
-            `;
-        }
-
-        const modalHtml = `
-            <div class="modal fade" id="teacherWorkingDaysModal" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"><i class="bi bi-calendar-week"></i> ${teacher.teacher_name} - Darbo dienos</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <p class="text-muted small mb-3">Pasirinkite dienas, kuriomis mokytojas dirba šiame tvarkaraštyje:</p>
-                            ${checkboxes}
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Atšaukti</button>
-                            <button type="button" class="btn btn-primary" onclick="saveTeacherWorkingDays(${teacherId})">
-                                <i class="bi bi-save"></i> Išsaugoti
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Remove existing modal if any
-        const existingModal = document.getElementById('teacherWorkingDaysModal');
-        if (existingModal) existingModal.remove();
-
-        // Add modal to body
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('teacherWorkingDaysModal'));
-        modal.show();
-
-        // Remove modal from DOM after hidden
-        document.getElementById('teacherWorkingDaysModal').addEventListener('hidden.bs.modal', function() {
-            this.remove();
+        
+        const summaryByDay = {};
+        (teacher.unavailability || []).forEach(r => {
+            const dn = dayNames[r.day] || r.day;
+            summaryByDay[dn] = summaryByDay[dn] || [];
+            summaryByDay[dn].push(`${r.start}–${r.end}`);
         });
-    };
-
-    window.saveTeacherWorkingDays = function(teacherId) {
-        const selectedDays = [];
-        for (let day = 1; day <= 5; day++) {
-            const checkbox = document.getElementById(`day${day}`);
-            if (checkbox && checkbox.checked) {
-                selectedDays.push(day);
-            }
+        
+        const unavailHtml = Object.keys(summaryByDay).length
+            ? Object.entries(summaryByDay).map(([dn, ranges]) => `<span class="badge bg-danger-subtle text-danger border me-1">${dn}: ${ranges.join(', ')}</span>`).join('')
+            : '<span class="badge bg-light text-muted">Nėra apribojimų</span>';
+        
+        const summaryEl = document.getElementById(`unavail-summary-${teacherId}`);
+        if (summaryEl) {
+            summaryEl.innerHTML = unavailHtml;
         }
-
-        fetch('<?php echo e(route('schools.timetables.update-teacher-working-days', [$school, $timetable])); ?>', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': '<?php echo e(csrf_token()); ?>'
-            },
-            body: JSON.stringify({
-                teacher_id: teacherId,
-                working_days: selectedDays
-            })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                // Update local data
-                const teacher = teachersData.find(t => t.teacher_id === teacherId);
-                if (teacher) {
-                    teacher.working_days = selectedDays;
-                }
-                
-                // Re-render list
-                renderTeachersList();
-
-                // Close modal
-                const modal = bootstrap.Modal.getInstance(document.getElementById('teacherWorkingDaysModal'));
-                if (modal) modal.hide();
-
-                // Show success message
-                showToast('Mokytojo darbo dienos atnaujintos', 'success');
-            } else {
-                showFlashMessage('Klaida išsaugant duomenis', 'danger');
-            }
-        })
-        .catch(e => {
-            console.error(e);
-            showFlashMessage('Klaida išsaugant duomenis', 'danger');
-        });
-    };
+    }
 
     function showToast(message, type = 'success') {
         const toastHtml = `
@@ -1328,6 +1532,38 @@ document.addEventListener('DOMContentLoaded', function() {
             this.closest('.position-fixed').remove();
         });
     }
+
+        function showErrorModal(message) {
+            const modalHtml = `
+                <div class="modal fade" id="errorAlertModal" tabindex="-1">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header bg-danger text-white">
+                                <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Klaida</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                ${message}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Gerai</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        
+            const existing = document.getElementById('errorAlertModal');
+            if (existing) existing.remove();
+        
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = new bootstrap.Modal(document.getElementById('errorAlertModal'));
+            modal.show();
+        
+            document.getElementById('errorAlertModal').addEventListener('hidden.bs.modal', function() {
+                this.remove();
+            });
+        }
 });
 </script>
 <?php $__env->stopPush(); ?>

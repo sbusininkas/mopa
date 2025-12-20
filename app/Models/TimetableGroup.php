@@ -20,6 +20,7 @@ class TimetableGroup extends Model
         'priority',
         'can_merge_with_same_subject',
         'merged_with_group_id',
+        'is_locked',
     ];
     public function room(): BelongsTo
     {

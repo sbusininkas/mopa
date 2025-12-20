@@ -56,6 +56,14 @@
                     </label>
                 </div>
             </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="form-check">
+                    <input type="checkbox" name="can_merge_with_same_subject" id="canMergeSameSubject" class="form-check-input" value="1">
+                    <label class="form-check-label" for="canMergeSameSubject" title="Leisti tvarkaraštyje sulieti grupę su to paties dalyko grupe">
+                        <i class="bi bi-link-45deg"></i> Leisti suliejimą su to paties dalyko grupe
+                    </label>
+                </div>
+            </div>
             <div class="col-12">
                 <button type="submit" class="btn btn-success"><i class="bi bi-plus-lg"></i> Pridėti grupę</button>
             </div>

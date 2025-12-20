@@ -48,6 +48,7 @@ def solve_timetable(data: Dict) -> Dict:
     lesson_times: List[Dict] = data.get('lesson_times', [])  # Get lesson times from school settings
     max_same_subject_per_day: int = int(data.get('max_same_subject_per_day', 2))
     allow_merges: bool = True  # enable merge logic when flagged
+    existing_slots: List[Dict] = data.get('existing_slots', [])  # Existing assignments for locked groups
 
     # Build indices
     day_index = {d: i for i, d in enumerate(days)}
@@ -57,8 +58,14 @@ def solve_timetable(data: Dict) -> Dict:
 
     # Decision variables: x[g][d][s] in {0,1}
     x = {}
+    locked_groups = set()  # Track which groups are locked
+    
     for g in groups:
         gid = g['id']
+        is_locked = bool(g.get('is_locked', False))
+        if is_locked:
+            locked_groups.add(gid)
+        
         x[gid] = {}
         for d in days:
             x[gid][d] = {}
@@ -66,11 +73,22 @@ def solve_timetable(data: Dict) -> Dict:
             for s in range(1, cap + 1):
                 x[gid][d][s] = model.NewBoolVar(f"x_g{gid}_{d}_{s}")
 
+    # Lock existing assignments for locked groups
+    for slot in existing_slots:
+        gid = slot.get('timetable_group_id')
+        day = slot.get('day')
+        slot_num = slot.get('slot')
+        
+        if gid in locked_groups and day in days:
+            # Force this assignment to stay
+            model.Add(x[gid][day][slot_num] == 1)
+
     # Each group SHOULD get lessons_per_week slots (soft constraint via objective)
     # We'll maximize the number of placed lessons later in objective
     lesson_targets = {}
     for g in groups:
         gid = g['id']
+        is_locked = bool(g.get('is_locked', False))
         lessons = int(max(1, int(g.get('lessons_per_week', 1))))
         lesson_targets[gid] = lessons
         vars_list = []
@@ -78,8 +96,11 @@ def solve_timetable(data: Dict) -> Dict:
             cap = day_caps.get(d, max_slots_per_day)
             for s in range(1, cap + 1):
                 vars_list.append(x[gid][d][s])
-        # Allow 0 to lessons slots (not strictly equal)
-        model.Add(sum(vars_list) <= lessons)
+        
+        # For locked groups, the constraint is already fixed by existing_slots
+        # For non-locked groups, allow 0 to lessons slots
+        if not is_locked:
+            model.Add(sum(vars_list) <= lessons)
 
     # Subject per day cap: Sum_s x[g,d,s] <= max_same_subject_per_day
     for g in groups:
@@ -158,57 +179,83 @@ def solve_timetable(data: Dict) -> Dict:
             for s in range(1, cap + 1):
                 model.Add(sum(x[g['id']][d][s] for g in sg) <= 1)
 
-    # Window minimization for students: minimize gaps during the day
-    # For each student and day, create gap variables to penalize in objective
+    # Window minimization for students: CRITICAL - minimize free time gaps during day
+    # This is KEY to reducing mokinių laisvi langai (free windows for students)
+    # Strategy: penalize gaps heavily, encourage consecutive lessons
     gap_vars = []
+    gap_penalties = []
+    
     for u, sg in student_groups.items():
         for d in days:
             cap = day_caps.get(d, max_slots_per_day)
-            # For each pair of slots, if student has lesson at both but not between them, it's a gap
-            for s in range(1, cap):
-                for s_next in range(s + 2, cap + 1):  # At least 2 slots apart
-                    # Check if this forms a gap
-                    has_at_s = sum(x[g['id']][d][s] for g in sg)
-                    has_at_s_next = sum(x[g['id']][d][s_next] for g in sg)
+            
+            # For each slot, track if student has a lesson
+            has_lesson = [sum(x[g['id']][d][s] for g in sg) for s in range(1, cap + 1)]
+            
+            # Find gaps: sequences where student has lessons but skips slots in between
+            for s_start in range(1, cap):
+                for s_end in range(s_start + 2, cap + 1):  # At least 2 apart for a gap
+                    # If has lesson at start and end, penalize any gap in between
+                    lesson_at_start = sum(x[g['id']][d][s_start] for g in sg)
+                    lesson_at_end = sum(x[g['id']][d][s_end] for g in sg)
                     
-                    # Check all intermediate slots
-                    has_between = sum(x[g['id']][d][s_mid] for g in sg for s_mid in range(s + 1, s_next))
-                    
-                    # Gap variable: 1 if has at s AND has at s_next but nothing between
-                    gap_var = model.NewBoolVar(f'gap_{u}_{d}_{s}_{s_next}')
-                    model.Add(has_at_s + has_at_s_next - has_between >= 2).OnlyEnforceIf(gap_var)
-                    model.Add(has_at_s + has_at_s_next - has_between < 2).OnlyEnforceIf(gap_var.Not())
-                    gap_vars.append(gap_var)
+                    # For each intermediate slot that's empty, create a penalty
+                    for s_mid in range(s_start + 1, s_end):
+                        has_between = sum(x[g['id']][d][s_mid] for g in sg)
+                        
+                        # Gap penalty: penalize if student has lessons before and after but not here
+                        # This encourages filling in the middle slots
+                        gap_var = model.NewBoolVar(f'gap_{u}_{d}_{s_start}_{s_mid}_{s_end}')
+                        
+                        # gap_var = 1 iff (has at start AND has at end AND empty at mid)
+                        model.Add(lesson_at_start + lesson_at_end - has_between >= 2).OnlyEnforceIf(gap_var)
+                        model.Add(lesson_at_start + lesson_at_end - has_between < 2).OnlyEnforceIf(gap_var.Not())
+                        
+                        gap_vars.append(gap_var)
+                        # Heavy penalty for gaps - this is our SECONDARY objective
+                        gap_penalties.append(1000 * gap_var)
 
     # Objective: 
     # 1. Maximize number of placed lessons (primary goal)
-    # 2. Prefer high-priority groups
-    # 3. Prefer earlier slots for high-priority groups
-    # 4. Minimize windows (gaps) for students during the day
+    # 2. Prefer high-priority groups - place in first 5 slots
+    # 3. Minimize windows (gaps) for students during the day (CRITICAL)
     objective_terms = []
     
-    # Primary: maximize total placed lessons (multiply by large weight)
+    # Primary: maximize total placed lessons with priority weighting
     for g in groups:
         gid = g['id']
         prio = int(g.get('priority', 0) or 0)
-        # Weight: priority matters, but placing ANY lesson is most important
-        placement_weight = 10000 + (prio * 100)  # Base 10000 + priority bonus
         
         for d in days:
             cap = day_caps.get(d, max_slots_per_day)
             for s in range(1, cap + 1):
-                # Maximize placement (negative because we'll minimize)
-                objective_terms.append(-placement_weight * x[gid][d][s])
+                # Base placement weight: everyone should be placed
+                base_weight = 10000
                 
-                # Secondary: small penalty for late slots
-                if prio > 0 and s > 5:
-                    late_penalty = prio * (s - 5)
-                    objective_terms.append(late_penalty * x[gid][d][s])
+                # Priority bonus: if priority > 0, give extra weight
+                # If in first 5 slots, give major bonus
+                if prio > 0:
+                    if s <= 5:
+                        # HIGH BONUS for placing priority lessons in first 5 slots
+                        priority_bonus = 5000 + (prio * 500)
+                    else:
+                        # PENALTY for placing priority lessons after slot 5
+                        priority_bonus = -2000 - (prio * 300)
+                else:
+                    # Non-priority: small bonus for early slots
+                    if s <= 5:
+                        priority_bonus = 100
+                    else:
+                        priority_bonus = 0
+                
+                placement_weight = base_weight + priority_bonus
+                # Maximize placement (negative because we minimize)
+                objective_terms.append(-placement_weight * x[gid][d][s])
 
     # Minimize windows (gaps) for students: penalize gap variables
-    # Each gap costs 500 points (high enough to avoid when possible)
-    for gap_var in gap_vars:
-        objective_terms.append(500 * gap_var)
+    # This is CRITICAL to reduce mokinių laisvi langai
+    for gap_penalty in gap_penalties:
+        objective_terms.append(gap_penalty)
 
     if objective_terms:
         model.Minimize(sum(objective_terms))

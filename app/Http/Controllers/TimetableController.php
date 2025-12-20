@@ -1471,6 +1471,14 @@ class TimetableController extends Controller
                 }
             }
 
+            // Check teacher working days and unavailability
+            $teacherId = $group->teacher_login_key_id;
+            if (!$timetable->isTeacherWorkingOnDay($teacherId, $day)) {
+                $conflictsRaw[] = 'Mokytojas šią dieną nedirba';
+            } elseif ($timetable->isTeacherUnavailableAtSlot($teacherId, $day, $slot)) {
+                $conflictsRaw[] = 'Mokytojas šiuo laiku nedirba';
+            }
+
             if ($scheduledCount >= $needed) {
                 $conflictsRaw[] = 'Šiai grupei jau suplanuotos visos pamokos';
             }
@@ -1684,6 +1692,34 @@ class TimetableController extends Controller
             'days' => $days,
             'maxHour' => $maxHour,
             'slots' => $slotsByHour,
+        ]);
+    }
+
+    /**
+     * Toggle group lock status (API endpoint)
+     */
+    public function toggleGroupLock(Request $request, School $school, Timetable $timetable, $groupId)
+    {
+        $user = auth()->user();
+        if (!$user->isSupervisor() && !$user->isSchoolAdmin($school->id)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $group = \App\Models\TimetableGroup::findOrFail($groupId);
+        
+        // Verify group belongs to this timetable
+        if ($group->timetable_id !== $timetable->id) {
+            return response()->json(['error' => 'Group does not belong to this timetable'], 400);
+        }
+
+        // Toggle lock status
+        $group->is_locked = !$group->is_locked;
+        $group->save();
+
+        return response()->json([
+            'success' => true,
+            'is_locked' => $group->is_locked,
+            'message' => $group->is_locked ? 'Grupė užrakinta' : 'Grupė atrakinta'
         ]);
     }
 }

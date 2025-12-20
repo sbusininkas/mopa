@@ -78,12 +78,16 @@ function renderGroupHTML(group) {
     const weekTypeLabel = group.week_type === 'all' ? 'Kiekv. savaitė' : (group.week_type === 'even' ? 'Lyginės' : 'Nelyginės');
     const roomBadge = group.room_number ? `<span class="badge bg-dark">${group.room_number} ${group.room_name || ''}</span>` : '';
     const priorityBadge = group.is_priority ? `<span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> Prioritetinė</span>` : '';
+    const lockBadge = group.is_locked ? `<span class="badge bg-success"><i class="bi bi-lock-fill"></i> Užrakinta</span>` : '';
     const groupDetailsUrl = `{{ route('schools.timetables.groups.details', [$school, $timetable, ':groupId']) }}`.replace(':groupId', group.id);
+    const lockIcon = group.is_locked ? 'bi-unlock' : 'bi-lock';
+    const lockTitle = group.is_locked ? 'Atrakinti grupę' : 'Užrakinti grupę';
+    const lockClass = group.is_locked ? 'btn-success' : 'btn-outline-secondary';
     
     return `
         <div class="modern-card mb-2" id="group${group.id}">
-            <div class="d-flex justify-content-between align-items-center py-2 px-3" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#groupCollapse${group.id}" aria-expanded="false">
-                <div class="d-flex align-items-center gap-2">
+            <div class="d-flex justify-content-between align-items-center py-2 px-3">
+                <div class="d-flex align-items-center gap-2" style="cursor:pointer; flex-grow: 1;" data-bs-toggle="collapse" data-bs-target="#groupCollapse${group.id}" aria-expanded="false">
                     <a href="${groupDetailsUrl}" class="group-name-link" onclick="event.stopPropagation()"><strong>${group.name}</strong></a>
                     <span class="badge bg-secondary">${group.subject_name || ''}</span>
                     <span class="badge bg-info text-dark">${group.teacher_name || ''}</span>
@@ -91,10 +95,14 @@ function renderGroupHTML(group) {
                     <span class="badge bg-light text-dark">${weekTypeLabel}</span>
                     <span class="badge bg-primary">${group.lessons_per_week} pam./sav.</span>
                     ${priorityBadge}
+                    ${lockBadge}
                 </div>
                 <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editGroup${group.id}" onclick="event.stopPropagation()"><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteGroup${group.id}" onclick="event.stopPropagation()"><i class="bi bi-trash"></i></button>
+                    <button class="btn ${lockClass}" onclick="toggleGroupLock(${group.id}, event)" title="${lockTitle}">
+                        <i class="bi ${lockIcon}"></i>
+                    </button>
+                    <button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editGroup${group.id}"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteGroup${group.id}"><i class="bi bi-trash"></i></button>
                 </div>
             </div>
             <div class="collapse" id="groupCollapse${group.id}">
@@ -258,6 +266,117 @@ function renderGroupHTML(group) {
             </div>
         </div>
     `;
+}
+
+// Toggle group lock status
+async function toggleGroupLock(groupId, event) {
+    event.stopPropagation();
+    event.preventDefault();
+    
+    const url = `{{ route('schools.timetables.groups.toggle-lock', [$school, $timetable, ':groupId']) }}`.replace(':groupId', groupId);
+    const button = event.currentTarget;
+    const icon = button.querySelector('i');
+    const groupCard = document.getElementById(`group${groupId}`);
+    
+    // Get current accordion state
+    const collapseElement = document.getElementById(`groupCollapse${groupId}`);
+    const wasExpanded = collapseElement && collapseElement.classList.contains('show');
+    
+    try {
+        // Show loading state
+        const originalHtml = button.innerHTML;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        button.disabled = true;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update button and badge without reloading entire list
+            const isLocked = data.is_locked;
+            
+            // Update button appearance
+            button.className = isLocked ? 'btn btn-success' : 'btn btn-outline-secondary';
+            button.title = isLocked ? 'Atrakinti grupę' : 'Užrakinti grupę';
+            icon.className = isLocked ? 'bi bi-unlock' : 'bi bi-lock';
+            
+            // Update lock badge in header
+            const headerDiv = groupCard.querySelector('.d-flex.align-items-center.gap-2');
+            const existingLockBadge = headerDiv.querySelector('.badge.bg-success');
+            
+            if (isLocked) {
+                if (!existingLockBadge) {
+                    const lockBadge = document.createElement('span');
+                    lockBadge.className = 'badge bg-success';
+                    lockBadge.innerHTML = '<i class="bi bi-lock-fill"></i> Užrakinta';
+                    headerDiv.appendChild(lockBadge);
+                }
+            } else {
+                if (existingLockBadge) {
+                    existingLockBadge.remove();
+                }
+            }
+            
+            // Show toast notification
+            showToast(data.message, 'success');
+            
+            // Restore accordion state if it was expanded
+            if (wasExpanded && collapseElement) {
+                // Don't collapse it
+            }
+        } else {
+            showToast('Klaida keičiant užrakinimo būseną', 'error');
+        }
+        
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+        
+    } catch (error) {
+        console.error('Error toggling lock:', error);
+        showToast('Klaida: ' + error.message, 'error');
+        button.disabled = false;
+    }
+}
+
+// Show toast notification
+function showToast(message, type = 'success') {
+    const toastHtml = `
+        <div class="position-fixed top-0 end-0 p-3" style="z-index: 1080">
+            <div class="toast align-items-center text-bg-${type === 'success' ? 'success' : 'danger'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="bi ${type === 'success' ? 'bi-check-circle' : 'bi-exclamation-triangle'} me-2"></i>${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const toastContainer = document.createElement('div');
+    toastContainer.innerHTML = toastHtml;
+    document.body.appendChild(toastContainer);
+    
+    const toastElement = toastContainer.querySelector('.toast');
+    const toast = new bootstrap.Toast(toastElement);
+    toast.show();
+    
+    // Remove toast element after it's hidden
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastContainer.remove();
+    });
 }
 
 // Load groups on page load

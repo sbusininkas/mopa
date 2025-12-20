@@ -163,6 +163,7 @@ Route::middleware(['auth', 'school.admin.or.supervisor'])->group(function () {
     Route::get('/admin/schools/{school}/timetables/{timetable}/student-schedule', [\App\Http\Controllers\TimetableGroupController::class, 'getStudentSchedule'])->name('schools.timetables.student-schedule');
     Route::get('/admin/schools/{school}/timetables/{timetable}/room-schedule', [\App\Http\Controllers\TimetableGroupController::class, 'getRoomSchedule'])->name('schools.timetables.room-schedule');
     Route::post('/admin/schools/{school}/timetables/{timetable}/groups/{group}/copy-unscheduled', [\App\Http\Controllers\TimetableGroupController::class, 'copyUnscheduled'])->name('schools.timetables.groups.copy-unscheduled');
+    Route::post('/admin/schools/{school}/timetables/{timetable}/groups/{group}/toggle-lock', [\App\Http\Controllers\TimetableController::class, 'toggleGroupLock'])->name('schools.timetables.groups.toggle-lock');
 
     // Admin API: students by class (used in timetable UI)
     Route::get('/admin/api/classes/{class}/students', [\App\Http\Controllers\AdminApiController::class, 'studentsByClass'])->name('admin.api.classes.students');

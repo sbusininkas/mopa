@@ -37,6 +37,7 @@ class TimetableGroupController extends Controller
                 'week_type' => $group->week_type,
                 'lessons_per_week' => $group->lessons_per_week ?? 0,
                 'is_priority' => $group->is_priority ? true : false,
+                'is_locked' => $group->is_locked ? true : false,
                 'can_merge_with_same_subject' => $group->can_merge_with_same_subject ? true : false,
                 'scheduled_count' => $scheduled,
                 'unscheduled_count' => $unscheduled,

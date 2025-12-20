@@ -7,6 +7,10 @@
             <input type="text" id="groupSearch" class="form-control form-control-sm" placeholder="Ieškoti pagal grupę, dalyką, mokytoją arba mokinį...">
         </div>
     </div>
+    <div class="alert alert-info border-0 rounded-0 mb-0" style="font-size: 0.97rem">
+        <i class="bi bi-lock-fill me-1"></i>
+        Užrakinus grupę, generuojant naują tvarkaraštį užrakintų grupių pamokų vietos NEBUS keičiamos.
+    </div>
     <div class="card-body">
         <div id="groupsList">
             <div class="text-center py-5" id="groupsLoader">

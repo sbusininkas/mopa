@@ -16,6 +16,78 @@
     <?php endif; ?>
 
     <div class="row g-3">
+            <!-- Group Timetable Table (styled like teacher view) -->
+            <div class="card mt-3">
+                <div class="card-header bg-dark text-white">
+                    <strong><i class="bi bi-calendar3"></i> Grupės tvarkaraštis</strong>
+                </div>
+                <div class="alert alert-info mt-2" style="font-size:0.97rem">
+                    <i class="bi bi-info-circle"></i>
+                    Šiame tvarkaraštyje rodomos visos šio dalyko pamokos su tuo pačiu mokytoju ir bent vienu bendru mokiniu (nebūtinai visi tie patys mokiniai). Dabartinės grupės pamokos pažymėtos mėlynai.
+                </div>
+                <div class="card-body p-0">
+                    <?php
+                        $days = ['Mon' => 'Pirmadienis', 'Tue' => 'Antradienis', 'Wed' => 'Trečiadienis', 'Thu' => 'Ketvirtadienis', 'Fri' => 'Penktadienis'];
+                        $maxSlot = 1;
+                        $groupStudentIds = $group->students->pluck('id')->toArray();
+                        $allSlots = $group->timetable->slots()->with(['group.students', 'group.subject', 'group.teacherLoginKey'])->get();
+                        // Find all group ids with same subject, same teacher, and at least one common student
+                        $relatedGroupIds = collect();
+                        foreach ($allSlots as $slot) {
+                            $g = $slot->group;
+                            if (!$g) continue;
+                            if ($g->subject_id === $group->subject_id && $g->teacher_login_key_id === $group->teacher_login_key_id) {
+                                $studentIds = $g->students->pluck('id')->toArray();
+                                if (count(array_intersect($groupStudentIds, $studentIds)) > 0) {
+                                    $relatedGroupIds->push($g->id);
+                                }
+                            }
+                        }
+                        $relatedGroupIds = $relatedGroupIds->unique()->values();
+                        // Now collect all slots for these groups
+                        $slots = $group->timetable->slots()->whereIn('timetable_group_id', $relatedGroupIds)->with(['group.subject'])->get();
+                        foreach ($slots as $slot) {
+                            if ((int)$slot->slot > $maxSlot) $maxSlot = (int)$slot->slot;
+                        }
+                        $grid = [];
+                        foreach ($slots as $slot) {
+                            $grid[(int)$slot->slot][$slot->day][] = $slot;
+                        }
+                    ?>
+                    <div class="table-responsive">
+                        <table class="table table-bordered align-middle mb-0" style="min-width: 700px;">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="width:60px" class="text-center">#</th>
+                                    <?php $__currentLoopData = $days; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $code => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                        <th class="text-center"><?php echo e($label); ?></th>
+                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php for($row=1; $row <= $maxSlot; $row++): ?>
+                                    <tr>
+                                        <td class="text-center fw-bold"><?php echo e($row); ?></td>
+                                        <?php $__currentLoopData = $days; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $code => $label): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                            <?php $slotsHere = $grid[$row][$code] ?? []; ?>
+                                            <td class="text-center timetable-cell" style="min-width:180px">
+                                                <?php if(count($slotsHere)): ?>
+                                                    <?php $__currentLoopData = $slotsHere; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $slot): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                                        <?php $isCurrent = $slot->timetable_group_id == $group->id; ?>
+                                                        <span class="badge <?php echo e($isCurrent ? 'bg-primary' : 'bg-secondary'); ?> mb-1" style="font-size:0.75rem;"><?php echo e($slot->group->name); ?><br/><small><?php echo e($slot->group->subject->name ?? ''); ?></small></span><br>
+                                                    <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                                                <?php else: ?>
+                                                    <span class="text-muted">—</span>
+                                                <?php endif; ?>
+                                            </td>
+                                        <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                                    </tr>
+                                <?php endfor; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         <div class="col-lg-12">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -162,6 +234,12 @@
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="is_priority" name="is_priority" value="1" <?php if(old('is_priority', $group->is_priority)): echo 'checked'; endif; ?>>
                             <label class="form-check-label" for="is_priority">Prioritetas</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="can_merge_with_same_subject" name="can_merge_with_same_subject" value="1" <?php if(old('can_merge_with_same_subject', $group->can_merge_with_same_subject)): echo 'checked'; endif; ?>>
+                            <label class="form-check-label" for="can_merge_with_same_subject">Leisti tvarkaraštyje sulieti grupę su to paties dalyko grupe</label>
                         </div>
                     </div>
                     <div class="col-12">
